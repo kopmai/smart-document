@@ -2,3 +2,5 @@ streamlit
 python-docx
 pdfplumber
 watchdog
+pythainlp
+pyspellchecker
