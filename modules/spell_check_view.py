@@ -6,8 +6,10 @@ def get_ai_correction(api_key, text):
     """ส่งข้อความไปให้ Gemini ช่วยแก้คำผิด"""
     try:
         genai.configure(api_key=api_key)
-        # ใช้โมเดล flash เพราะเร็วและฟรี
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # --- FIX: เปลี่ยนจาก 'gemini-1.5-flash' เป็น 'gemini-pro' ---
+        # gemini-pro เป็นรุ่นมาตรฐานที่ทำงานได้กับ library ทุกเวอร์ชัน
+        model = genai.GenerativeModel('gemini-pro')
         
         prompt = f"""
         Act as a professional proofreader. 
@@ -30,19 +32,15 @@ def render_spell_check_mode():
     with col_setup:
         st.markdown("### 1. ใส่เนื้อหา (Input)")
         
-        # --- LOGIC ใหม่: ดึง Key จาก Secrets ก่อน ---
+        # ดึง Key จาก Secrets ก่อน
         api_key = None
-        
-        # เช็คว่ามี Key ในตู้เซฟไหม?
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
             st.success("✅ เชื่อมต่อกับ API Key อัตโนมัติแล้ว")
         else:
-            # ถ้าไม่มี ค่อยให้กรอกเอง
             api_key = st.text_input("🔑 Gemini API Key", type="password", help="รับ Key ฟรีได้ที่ aistudio.google.com")
             if not api_key:
                 st.warning("⚠️ ไม่พบ API Key ใน Secrets กรุณากรอกเอง")
-        # ----------------------------------------
         
         st.markdown("---")
         text_input = st.text_area("✍️ ต้นฉบับ (Original Text)", height=400, placeholder="วางข้อความที่ต้องการตรวจทานที่นี่...")
@@ -55,17 +53,16 @@ def render_spell_check_mode():
         
         if btn_check and api_key and text_input:
             with st.spinner("🤖 AI กำลังอ่านและแก้ไขประโยค..."):
-                # 1. ให้ AI แก้บทความ
                 corrected_text = get_ai_correction(api_key, text_input)
                 
                 if "Error:" in corrected_text:
                     st.error(corrected_text)
                 else:
-                    # 2. เอามาเข้ากระบวนการ Diff
                     original_lines = text_input.splitlines()
                     corrected_lines = corrected_text.splitlines()
                     
                     comparator = TextComparator()
+                    # ใช้โหมด all เพื่อให้เห็นบริบทชัดเจน
                     raw_html = comparator.generate_diff_html(original_lines, corrected_lines, mode="all")
                     final_html = comparator.get_final_display_html(raw_html)
                     
