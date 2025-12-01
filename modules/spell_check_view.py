@@ -14,7 +14,7 @@ def get_available_models(api_key):
     except:
         return []
 
-def get_ai_correction(api_key, text, model_name):
+def get_ai_correction_stream(api_key, text, model_name, progress_bar=None, status_box=None):
     try:
         genai.configure(api_key=api_key)
         
@@ -37,12 +37,36 @@ def get_ai_correction(api_key, text, model_name):
         {text}
         """
         
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        # --- FIX: ใช้โหมด stream=True เพื่อให้รับข้อมูลทีละนิด ---
+        response = model.generate_content(prompt, stream=True)
+        
+        full_text = ""
+        total_len = len(text) # ความยาวคร่าวๆ ของต้นฉบับ
+        
+        for chunk in response:
+            if chunk.text:
+                full_text += chunk.text
+                
+                # คำนวณ % คร่าวๆ (เทียบความยาวที่ได้ กับความยาวต้นฉบับ)
+                # ปกติแก้คำผิด ความยาวจะไม่ต่างจากเดิมมาก
+                if progress_bar:
+                    current_len = len(full_text)
+                    # สูตรคำนวณ: เอาความยาวที่ได้ / ความยาวต้นฉบับ (Max 95% เผื่อไว้ตอนจบ)
+                    progress = min(current_len / total_len, 0.95)
+                    progress_bar.progress(progress)
+                    
+                if status_box:
+                    status_box.caption(f"🤖 AI กำลังเขียน... (ได้มาแล้ว {len(full_text)} ตัวอักษร)")
+
+        # จบแล้วปรับเป็น 100%
+        if progress_bar:
+            progress_bar.progress(1.0)
+            
+        return full_text.strip()
+        
     except Exception as e:
         if "429" in str(e):
-            # ใส่ Prefix คำว่า API_ERROR เพื่อให้เช็คได้แม่นยำ
-            return "API_ERROR: โควต้าเต็ม (Quota Exceeded) สำหรับโมเดลนี้ กรุณาเปลี่ยนโมเดลอื่น"
+            return "API_ERROR: โควต้าเต็ม (Quota Exceeded) กรุณาเปลี่ยนโมเดล"
         return f"API_ERROR: {str(e)}"
 
 def render_spell_check_mode():
@@ -61,24 +85,17 @@ def render_spell_check_mode():
         selected_model = None
         if api_key:
             model_options = get_available_models(api_key)
-            
             if model_options:
                 default_idx = 0
                 for i, name in enumerate(model_options):
-                    # พยายามเลือก gemini-1.5-flash หรือ pro เป็นค่าเริ่มต้น
                     if "flash" in name and "exp" not in name:
                         default_idx = i
                         break
                     elif "gemini-pro" in name and "exp" not in name:
                         default_idx = i
-                
-                selected_model = st.selectbox(
-                    "🤖 เลือก AI Model", 
-                    model_options, 
-                    index=default_idx
-                )
+                selected_model = st.selectbox("🤖 เลือก AI Model", model_options, index=default_idx)
             else:
-                st.error("❌ ไม่พบโมเดลที่ใช้งานได้")
+                st.error("❌ ไม่พบโมเดล")
         
         st.markdown("---")
         text_input = st.text_area("✍️ ต้นฉบับ (Original Text)", height=400, placeholder="วางข้อความที่ต้องการตรวจทานที่นี่...")
@@ -89,15 +106,22 @@ def render_spell_check_mode():
         st.markdown("### 2. ผลการตรวจทาน (AI Suggestion)")
 
         if btn_check and api_key and text_input and selected_model:
-            with st.spinner(f"กำลังให้ {selected_model} ตรวจทาน..."):
+            
+            # --- ส่วนแสดง Progress Bar ---
+            progress_bar = st.progress(0, text="กำลังเตรียมการ...")
+            status_box = st.empty() # กล่องข้อความเล็กๆ ใต้หลอดโหลด
+            
+            try:
+                # เรียกฟังก์ชันแบบ Stream
+                corrected_text = get_ai_correction_stream(api_key, text_input, selected_model, progress_bar, status_box)
                 
-                corrected_text = get_ai_correction(api_key, text_input, selected_model)
+                # โหลดเสร็จแล้ว ล้างหลอดทิ้ง เพื่อความสะอาดตา
+                progress_bar.empty()
+                status_box.empty()
 
-                # --- FIX: เปลี่ยนวิธีเช็ค Error ให้แม่นขึ้น ---
                 if corrected_text.startswith("API_ERROR:"):
                     st.error("เกิดข้อผิดพลาดในการเชื่อมต่อ AI:")
-                    st.error(corrected_text.replace("API_ERROR:", "")) # ตัดคำนำหน้าออกตอนโชว์
-                # -------------------------------------------
+                    st.error(corrected_text.replace("API_ERROR:", ""))
                 else:
                     original_lines = text_input.splitlines()
                     corrected_lines = corrected_text.splitlines()
@@ -114,3 +138,5 @@ def render_spell_check_mode():
                     
                     with st.expander("📄 ดูข้อความที่แก้แล้ว (Plain Text)"):
                         st.code(corrected_text, language=None)
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดที่ไม่คาดคิด: {e}")
