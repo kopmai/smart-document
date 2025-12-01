@@ -11,14 +11,19 @@ def get_best_available_model(api_key):
         all_models = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         model_names = [m.name for m in all_models]
         
-        # 2. รายชื่อตัวเทพที่เราอยากได้ (เรียงตามความเก่ง/เร็ว)
+        # --- FIX: ปรับลำดับความสำคัญใหม่ (เอาตัวเสถียรและฟรีเยอะๆ ขึ้นก่อน) ---
         preferred_list = [
-            'models/gemini-1.5-flash',
+            'models/gemini-1.5-flash',          # <--- ตัวนี้เร็วและโควต้าฟรีเยอะสุด (แนะนำ!)
             'models/gemini-1.5-flash-latest',
-            'models/gemini-1.5-pro',
+            'models/gemini-1.5-pro',            # <--- ตัวนี้ฉลาดแต่ช้ากว่า
+            'models/gemini-1.5-pro-latest',
             'models/gemini-1.0-pro',
-            'models/gemini-pro'
+            'models/gemini-pro',
+            # พวก Experimental เอาไว้ท้ายสุด เพราะมักจะ Limit 0
+            'models/gemini-2.5-pro-exp', 
+            'models/gemini-exp-1206'
         ]
+        # ------------------------------------------------------------------
         
         # 3. วนหา: ถ้าเจอตัวไหนในลิสต์ ก็เอาตัวนั้นเลย
         for preferred in preferred_list:
@@ -39,7 +44,7 @@ def get_ai_correction(api_key, text, model_name):
     try:
         genai.configure(api_key=api_key)
         
-        # ปิด Safety Filter เพื่อลดโอกาส Error
+        # ปิด Safety Filter
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -62,6 +67,9 @@ def get_ai_correction(api_key, text, model_name):
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
+        # ดักจับ Error 429 (Quota Exceeded) แล้วแจ้งเตือนให้ชัดเจน
+        if "429" in str(e):
+            return "Error 429: โควต้าการใช้งานเกินลิมิต (Quota Exceeded) กรุณารอสักครู่แล้วลองใหม่ หรือเปลี่ยน API Key"
         return f"Error: {str(e)}"
 
 def render_spell_check_mode():
@@ -84,7 +92,6 @@ def render_spell_check_mode():
         st.markdown("---")
         text_input = st.text_area("✍️ ต้นฉบับ (Original Text)", height=400, placeholder="วางข้อความที่ต้องการตรวจทานที่นี่...")
         
-        # ปุ่มกด
         btn_check = st.button("✨ ให้ AI ตรวจทาน (Auto-Detect Model)", type="primary", use_container_width=True, disabled=(not api_key or not text_input))
 
     with col_result:
@@ -98,14 +105,13 @@ def render_spell_check_mode():
                 
                 if not best_model:
                     st.error("❌ ไม่พบโมเดลที่ใช้งานได้ใน Key นี้")
-                    st.warning("สาเหตุ: API Key อาจผิด หรือโปรเจกต์ใน Google Cloud ยังไม่ได้เปิดใช้งาน Generative Language API")
                 else:
-                    st.info(f"⚡ กำลังใช้งานโมเดล: `{best_model}`") # บอก User ว่าได้ตัวไหน
+                    st.info(f"⚡ กำลังใช้งานโมเดล: `{best_model}`") 
                     
                     # --- STEP 2: เริ่มแก้คำผิด ---
                     corrected_text = get_ai_correction(api_key, text_input, best_model)
 
-                    if "Error:" in corrected_text:
+                    if "Error" in corrected_text:
                         st.error("เกิดข้อผิดพลาดในการเชื่อมต่อ AI:")
                         st.error(corrected_text)
                     else:
