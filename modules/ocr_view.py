@@ -4,7 +4,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 import io
 from docx import Document
-import re  # <--- เพิ่ม RE เพื่อใช้จัดการตัดคำขยะ
+import re
 
 def get_available_models(api_key):
     try:
@@ -15,69 +15,50 @@ def get_available_models(api_key):
         return []
 
 def clean_ocr_text(text):
-    """
-    ฟังก์ชันทำความสะอาดข้อความ: ลบเส้นตาราง เส้นปะ หรือ Markdown Table ที่รกๆ ออก
-    """
+    """ฟังก์ชันลบเส้นตาราง/เส้นปะ"""
     if not text: return ""
-    
     lines = text.split('\n')
     cleaned_lines = []
-    
     for line in lines:
-        # Regex: ตรวจสอบว่าบรรทัดนี้ มีแต่ตัวอักษรพวกนี้หรือไม่? (-, _, =, |, :, +, space)
-        # ถ้าทั้งบรรทัดมีแต่พวกนี้ และมีความยาวเกิน 3 ตัวอักษร -> ถือว่าเป็นเส้นตาราง -> ลบทิ้ง
+        # ลบบรรทัดที่มีแต่ขีด เส้นตั้ง หรือเครื่องหมายตาราง เกิน 3 ตัวอักษร
         if re.match(r'^[\s\|\-\_\=\:\+]{3,}$', line.strip()):
-            continue # ข้ามบรรทัดนี้ไปเลย (ลบทิ้ง)
-            
+            continue
         cleaned_lines.append(line)
-        
     return '\n'.join(cleaned_lines)
 
 def ocr_single_image(api_key, image, model_name):
-    """ส่งรูปภาพ 1 รูป ไปให้ AI แกะข้อความ"""
+    """ส่งรูปภาพไปให้ AI แกะข้อความ"""
     try:
         genai.configure(api_key=api_key)
-        
-        # Safety Settings
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
-        
         model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
         
-        # ปรับ Prompt ให้ AI พยายามส่ง Plain Text มากขึ้น
         prompt = """
         Extract all text from this image perfectly.
-        - Analyze the layout carefully.
+        - Preserve the layout (paragraphs, tables) as much as possible.
         - If there is a table, preserve the data structure but DO NOT print ASCII borders or Markdown divider lines (like |---|). 
         - Just use spacing or tabs to separate columns if possible.
         - If Thai text is present, ensure correct spelling.
         """
-        
         response = model.generate_content([prompt, image])
-        raw_text = response.text
-        
-        # --- CLEANING STEP: ล้างเส้นปะทิ้งก่อนส่งกลับ ---
-        final_text = clean_ocr_text(raw_text)
-        
+        final_text = clean_ocr_text(response.text)
         return final_text
-        
     except Exception as e:
         return f"[Error on this page: {str(e)}]"
 
 def create_word_docx(text_list):
-    """สร้างไฟล์ Word จากรายการข้อความ"""
+    """สร้างไฟล์ Word"""
     doc = Document()
     doc.add_heading('OCR Result - Smart Document', 0)
-    
     for i, text in enumerate(text_list):
         doc.add_heading(f'Page {i+1}', level=1)
         doc.add_paragraph(text)
         doc.add_page_break()
-        
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -85,19 +66,14 @@ def create_word_docx(text_list):
 
 def render_ocr_mode():
     # --- Session State ---
-    if 'ocr_results' not in st.session_state:
-        st.session_state['ocr_results'] = [] 
-    if 'ocr_images' not in st.session_state:
-        st.session_state['ocr_images'] = []
-    if 'current_page_index' not in st.session_state:
-        st.session_state['current_page_index'] = 0
-    if 'processed_file_id' not in st.session_state:
-        st.session_state['processed_file_id'] = None
+    if 'ocr_results' not in st.session_state: st.session_state['ocr_results'] = [] 
+    if 'ocr_images' not in st.session_state: st.session_state['ocr_images'] = []
+    if 'current_page_index' not in st.session_state: st.session_state['current_page_index'] = 0
+    if 'processed_file_id' not in st.session_state: st.session_state['processed_file_id'] = None
 
     # 1. ส่วนตั้งค่า
     with st.expander("⚙️ ตั้งค่าและอัปโหลดไฟล์ (Settings & Upload)", expanded=True):
         col_key, col_model = st.columns([1, 1])
-        
         with col_key:
             api_key = None
             if "GEMINI_API_KEY" in st.secrets:
@@ -105,7 +81,6 @@ def render_ocr_mode():
                 st.success("✅ เชื่อมต่อกับ API Key อัตโนมัติแล้ว")
             else:
                 api_key = st.text_input("🔑 Gemini API Key", type="password")
-
         with col_model:
             selected_model = None
             if api_key:
@@ -127,7 +102,6 @@ def render_ocr_mode():
                 st.session_state['processed_file_id'] = None 
 
             if st.button("🚀 เริ่มประมวลผล (Start Processing All Pages)", type="primary"):
-                
                 with st.spinner("📦 กำลังแยกหน้า PDF เป็นรูปภาพ..."):
                     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
                     temp_images = []
@@ -136,21 +110,16 @@ def render_ocr_mode():
                         pix = page.get_pixmap(dpi=150)
                         img = Image.open(io.BytesIO(pix.tobytes()))
                         temp_images.append(img)
-                    
                     st.session_state['ocr_images'] = temp_images
                     st.session_state['ocr_results'] = [""] * len(temp_images)
                     st.session_state['processed_file_id'] = uploaded_file.file_id
 
                 progress_bar = st.progress(0, text="กำลังเริ่ม OCR...")
                 total_pages = len(st.session_state['ocr_images'])
-                
                 for i, img in enumerate(st.session_state['ocr_images']):
                     progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
-                    
-                    # เรียกฟังก์ชันที่มีการ Clean แล้ว
                     text_result = ocr_single_image(api_key, img, selected_model)
                     st.session_state['ocr_results'][i] = text_result
-                
                 progress_bar.progress(1.0, text="เสร็จเรียบร้อย!")
                 st.rerun()
 
@@ -159,51 +128,60 @@ def render_ocr_mode():
         
         st.markdown("---")
         
+        # --- Controller Bar (ย้ายปุ่ม Download มาไว้บรรทัดนี้) ---
         total_pages = len(st.session_state['ocr_images'])
-        col_prev, col_nav_info, col_next = st.columns([1, 4, 1])
+        
+        # แบ่งคอลัมน์ใหม่: [ปุ่มก่อนหน้า, ตัวบอกหน้า, ปุ่มถัดไป, ปุ่มดาวน์โหลด]
+        col_prev, col_nav_info, col_next, col_download = st.columns([1, 2, 1, 1.5])
         
         with col_prev:
-            if st.button("⬅️ หน้าก่อนหน้า", use_container_width=True, disabled=(st.session_state['current_page_index'] == 0)):
+            if st.button("⬅️ ก่อนหน้า", use_container_width=True, disabled=(st.session_state['current_page_index'] == 0)):
                 st.session_state['current_page_index'] -= 1
                 st.rerun()
 
         with col_nav_info:
-            st.markdown(f"<h4 style='text-align: center;'>📄 หน้า {st.session_state['current_page_index'] + 1} จาก {total_pages}</h4>", unsafe_allow_html=True)
+            # จัดกึ่งกลางแนวตั้งให้สวยงาม
+            st.markdown(
+                f"<div style='text-align: center; padding-top: 5px; font-weight: bold;'>📄 หน้า {st.session_state['current_page_index'] + 1} / {total_pages}</div>", 
+                unsafe_allow_html=True
+            )
 
         with col_next:
-            if st.button("หน้าถัดไป ➡️", use_container_width=True, disabled=(st.session_state['current_page_index'] == total_pages - 1)):
+            if st.button("ถัดไป ➡️", use_container_width=True, disabled=(st.session_state['current_page_index'] == total_pages - 1)):
                 st.session_state['current_page_index'] += 1
                 st.rerun()
-
-        col_left_view, col_right_view = st.columns([1, 1])
-        curr_idx = st.session_state['current_page_index']
-        
-        with col_left_view:
-            st.info("👁️ ต้นฉบับ (PDF Preview)")
-            if curr_idx < len(st.session_state['ocr_images']):
-                st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True, caption=f"Page {curr_idx+1}")
-
-        with col_right_view:
-            st.success("📝 ผลลัพธ์ (Editable Text)")
-            if curr_idx < len(st.session_state['ocr_results']):
-                edited_text = st.text_area(
-                    label="ocr_output",
-                    value=st.session_state['ocr_results'][curr_idx],
-                    height=600,
-                    label_visibility="collapsed",
-                    key=f"text_area_{curr_idx}"
-                )
-                st.session_state['ocr_results'][curr_idx] = edited_text
-
-        st.markdown("---")
-        col_export, _ = st.columns([1, 3])
-        with col_export:
+                
+        with col_download:
+            # สร้างไฟล์ Word รอไว้เลย
             docx_file = create_word_docx(st.session_state['ocr_results'])
             st.download_button(
-                label="💾 ดาวน์โหลดเป็น Word (.docx)",
+                label="💾 Export Word",
                 data=docx_file,
                 file_name="ocr_result.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 type="primary",
                 use_container_width=True
             )
+
+        # --- Dual View ---
+        st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัดนิดนึง
+        col_left_view, col_right_view = st.columns([1, 1])
+        curr_idx = st.session_state['current_page_index']
+        
+        with col_left_view:
+            st.info("👁️ ต้นฉบับ (PDF Preview)")
+            if curr_idx < len(st.session_state['ocr_images']):
+                st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True)
+
+        with col_right_view:
+            st.success("📝 ผลลัพธ์ (Editable Text)")
+            if curr_idx < len(st.session_state['ocr_results']):
+                # --- FIX: ปรับความสูงเป็น 800px เพื่อให้ใกล้เคียงหน้า A4 ---
+                edited_text = st.text_area(
+                    label="ocr_output",
+                    value=st.session_state['ocr_results'][curr_idx],
+                    height=800,  # เพิ่มความสูงตรงนี้
+                    label_visibility="collapsed",
+                    key=f"text_area_{curr_idx}"
+                )
+                st.session_state['ocr_results'][curr_idx] = edited_text
