@@ -7,7 +7,7 @@ from modules.code_view import render_code_compare_mode
 from modules.spell_check_view import render_spell_check_mode
 from modules.ocr_view import render_ocr_mode
 from modules.document_view import render_document_compare_mode
-from modules.quick_convert_view import render_quick_convert_mode # <--- Import น้องใหม่
+from modules.quick_convert_view import render_quick_convert_mode
 import streamlit.components.v1 as components
 
 # --- 1. CONFIG & STYLES ---
@@ -66,13 +66,14 @@ with st.sidebar:
     app_mode = option_menu(
         menu_title="รายการระบบ", 
         options=[
-            "แก้ PDF เพี้ยน (Quick Fix)", # <--- เมนูใหม่ เอาไว้บนสุดเพราะน่าจะใช้บ่อย
-            "แปลง PDF เป็นข้อความ (AI OCR)",
+            "แปลง PDF เป็นข้อความ (AI OCR)",  # <--- อันดับ 1
+            "แก้ PDF เพี้ยน (Quick Fix)",     # <--- อันดับ 2
             "เปรียบเทียบเอกสาร",
             "ตรวจการสะกดคำ",
             "เปรียบเทียบโค้ด"
         ],
-        icons=['magic', 'qr-code-scan', 'file-earmark-diff', 'spellcheck', 'code-slash'], # เพิ่มไอคอน magic
+        # สลับไอคอนตามด้วย: qr-code-scan ขึ้นก่อน magic
+        icons=['qr-code-scan', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash'], 
         menu_icon="grid-fill", 
         default_index=0,
         styles={
@@ -85,11 +86,12 @@ with st.sidebar:
     
     st.markdown("---")
     
-    if app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
-        st.info("💡 **Fast Track:** แปลงไฟล์ PDF ที่ก๊อปแล้วเป็นภาษาต่างดาว ให้เป็น Word ทันที")
-
-    elif app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+    # Contextual Info
+    if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
         st.info("💡 **Advanced:** อ่านเอกสารทีละหน้า พร้อมตรวจสอบและแก้ไขข้อความ")
+
+    elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
+        st.info("💡 **Fast Track:** แปลงไฟล์ PDF ที่ก๊อปแล้วเป็นภาษาต่างดาว ให้เป็น Word ทันที")
 
     elif app_mode == "เปรียบเทียบเอกสาร":
         st.info("💡 **Tips:** อัปโหลดไฟล์ที่กล่องด้านขวา เพื่อเริ่มเปรียบเทียบ")
@@ -102,13 +104,13 @@ with st.sidebar:
 
 # --- 3. MAIN LOGIC (Controller) ---
 
-# 1. Quick Fix (มาใหม่)
-if app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
-    render_quick_convert_mode()
-
-# 2. Advanced OCR
-elif app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+# 1. AI OCR (Full Feature)
+if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
     render_ocr_mode()
+
+# 2. Quick Fix
+elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
+    render_quick_convert_mode()
 
 # 3. Compare Docs
 elif app_mode == "เปรียบเทียบเอกสาร":
