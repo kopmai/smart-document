@@ -3,136 +3,188 @@ import google.generativeai as genai
 import fitz  # PyMuPDF
 from PIL import Image
 import io
+from docx import Document # สำหรับสร้างไฟล์ Word
+
+# --- SESSION STATE MANAGEMENT ---
+# เราต้องเก็บข้อมูลไว้ใน Session State เพื่อให้กดเปลี่ยนหน้าแล้วข้อมูลไม่หาย
+if 'ocr_results' not in st.session_state:
+    st.session_state['ocr_results'] = [] # เก็บข้อความแต่ละหน้า
+if 'ocr_images' not in st.session_state:
+    st.session_state['ocr_images'] = [] # เก็บรูปภาพแต่ละหน้า (Preview)
+if 'current_page_index' not in st.session_state:
+    st.session_state['current_page_index'] = 0
+if 'processed_file_id' not in st.session_state:
+    st.session_state['processed_file_id'] = None # เอาไว้เช็คว่าเปลี่ยนไฟล์ใหม่หรือยัง
 
 def get_available_models(api_key):
-    """ดึงรายชื่อโมเดล (ต้องเป็นตัวที่รองรับ Vision ได้ด้วย)"""
     try:
         genai.configure(api_key=api_key)
-        all_models = []
-        for m in genai.list_models():
-            # เช็คว่ารองรับการ generateContent ไหม
-            if 'generateContent' in m.supported_generation_methods:
-                all_models.append(m.name)
+        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         return all_models
     except:
         return []
 
-def perform_ocr(api_key, image, model_name):
-    """ส่งรูปภาพไปให้ AI แกะข้อความ"""
+def ocr_single_image(api_key, image, model_name):
+    """ส่งรูปภาพ 1 รูป ไปให้ AI แกะข้อความ"""
     try:
         genai.configure(api_key=api_key)
-        
-        # ตั้งค่าความปลอดภัย
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
-        
         model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
         
-        # Prompt สั่งงาน
         prompt = """
-        Analyze this image and extract all text content visible in it.
-        - Preserve the original layout and structure as much as possible.
-        - If there are tables, try to represent them clearly.
-        - If the text is in Thai, ensure accurate Thai character recognition.
-        - Output ONLY the extracted text.
+        Extract all text from this image perfectly.
+        - Preserve the layout (paragraphs, tables) as much as possible.
+        - If Thai text is present, ensure correct spelling.
+        - Return ONLY the content, no conversational text.
         """
-        
-        # ส่งทั้ง Prompt และ รูปภาพ ไปพร้อมกัน
-        response = model.generate_content([prompt, image], stream=True)
-        
-        full_text = ""
-        for chunk in response:
-            if chunk.text:
-                full_text += chunk.text
-                yield chunk.text # ส่งค่ากลับแบบ Stream
-                
+        response = model.generate_content([prompt, image])
+        return response.text
     except Exception as e:
-        yield f"Error: {str(e)}"
+        return f"[Error on this page: {str(e)}]"
+
+def create_word_docx(text_list):
+    """สร้างไฟล์ Word จากรายการข้อความ"""
+    doc = Document()
+    doc.add_heading('OCR Result - Smart Document', 0)
+    
+    for i, text in enumerate(text_list):
+        doc.add_heading(f'Page {i+1}', level=1)
+        doc.add_paragraph(text)
+        doc.add_page_break() # ขึ้นหน้าใหม่ตามต้นฉบับ
+        
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 def render_ocr_mode():
-    # แบ่งหน้าจอ ซ้าย(Input) | ขวา(Output)
-    col_left, col_right = st.columns([1, 1])
-    
-    with col_left:
-        st.markdown("### 1. ตั้งค่าและอัปโหลด (Setup)")
+    # 1. ส่วนตั้งค่า (อยู่บนสุด แบบพับเก็บได้)
+    with st.expander("⚙️ ตั้งค่าและอัปโหลดไฟล์ (Settings & Upload)", expanded=True):
+        col_key, col_model = st.columns([1, 1])
         
-        # --- ส่วน Key และเลือก Model (เหมือนโมดูลอื่น) ---
-        api_key = None
-        if "GEMINI_API_KEY" in st.secrets:
-            api_key = st.secrets["GEMINI_API_KEY"]
-            st.success("✅ เชื่อมต่อกับ API Key อัตโนมัติแล้ว")
-        else:
-            api_key = st.text_input("🔑 Gemini API Key", type="password")
+        with col_key:
+            api_key = None
+            if "GEMINI_API_KEY" in st.secrets:
+                api_key = st.secrets["GEMINI_API_KEY"]
+                st.success("✅ เชื่อมต่อกับ API Key อัตโนมัติแล้ว")
+            else:
+                api_key = st.text_input("🔑 Gemini API Key", type="password")
 
-        selected_model = None
-        if api_key:
-            model_options = get_available_models(api_key)
-            if model_options:
-                default_idx = 0
-                for i, name in enumerate(model_options):
-                    if "flash" in name and "exp" not in name:
-                        default_idx = i; break
-                selected_model = st.selectbox("🤖 เลือก AI Model (ต้องรองรับรูปภาพ)", model_options, index=default_idx)
-        # -----------------------------------------------
+        with col_model:
+            selected_model = None
+            if api_key:
+                model_options = get_available_models(api_key)
+                if model_options:
+                    default_idx = 0
+                    for i, name in enumerate(model_options):
+                        if "flash" in name and "exp" not in name:
+                            default_idx = i; break
+                    selected_model = st.selectbox("🤖 เลือก AI Model", model_options, index=default_idx)
+
+        uploaded_file = st.file_uploader("📄 อัปโหลดไฟล์ PDF (ระบบจะอ่านทุกหน้า)", type=["pdf"])
+
+        # ปุ่มเริ่มทำงาน (Start)
+        if uploaded_file and api_key and selected_model:
+            # เช็คว่าไฟล์เปลี่ยนใหม่ไหม? ถ้าเปลี่ยนให้เคลียร์ค่าเก่า
+            if st.session_state['processed_file_id'] != uploaded_file.file_id:
+                st.session_state['ocr_results'] = []
+                st.session_state['ocr_images'] = []
+                st.session_state['current_page_index'] = 0
+                st.session_state['processed_file_id'] = None # Reset flag
+
+            if st.button("🚀 เริ่มประมวลผล (Start Processing All Pages)", type="primary"):
+                
+                # Step A: แปลง PDF เป็นรูปภาพทั้งหมดก่อน
+                with st.spinner("📦 กำลังแยกหน้า PDF เป็นรูปภาพ..."):
+                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    temp_images = []
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        pix = page.get_pixmap(dpi=150)
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        temp_images.append(img)
+                    
+                    st.session_state['ocr_images'] = temp_images
+                    st.session_state['ocr_results'] = [""] * len(temp_images) # จองที่ว่างไว้
+                    st.session_state['processed_file_id'] = uploaded_file.file_id # Mark as processed
+
+                # Step B: ส่งรูปไป OCR ทีละหน้า (พร้อม Progress Bar)
+                progress_bar = st.progress(0, text="กำลังเริ่ม OCR...")
+                total_pages = len(st.session_state['ocr_images'])
+                
+                for i, img in enumerate(st.session_state['ocr_images']):
+                    progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
+                    
+                    # Call AI
+                    text_result = ocr_single_image(api_key, img, selected_model)
+                    st.session_state['ocr_results'][i] = text_result
+                
+                progress_bar.progress(1.0, text="เสร็จเรียบร้อย!")
+                st.rerun() # รีเฟรชหน้าจอเพื่อโชว์ผลลัพธ์
+
+    # 2. ส่วนแสดงผล (Synced View)
+    # จะแสดงก็ต่อเมื่อมีข้อมูลใน Session State แล้ว
+    if st.session_state['processed_file_id'] and st.session_state['ocr_results']:
         
         st.markdown("---")
         
-        # อัปโหลดไฟล์ PDF
-        uploaded_file = st.file_uploader("📄 อัปโหลดไฟล์ PDF ที่นี่", type=["pdf"])
+        # --- Controller (ปุ่มเปลี่ยนหน้า) ---
+        total_pages = len(st.session_state['ocr_images'])
+        col_prev, col_nav_info, col_next = st.columns([1, 4, 1])
         
-        pil_image = None # ตัวแปรเก็บรูปภาพที่จะส่งให้ AI
-        
-        if uploaded_file:
-            # ใช้ PyMuPDF แปลง PDF เป็นรูปภาพเพื่อโชว์ Preview
-            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            total_pages = len(doc)
-            
-            # ถ้ามีหลายหน้า ให้เลือกหน้าได้
-            page_num = st.number_input(f"เลือกหน้า (จากทั้งหมด {total_pages} หน้า)", min_value=1, max_value=total_pages, value=1)
-            
-            # แปลงหน้านั้นเป็นรูป
-            page = doc.load_page(page_num - 1) 
-            pix = page.get_pixmap(dpi=150) # แปลงเป็น Pixmap
-            pil_image = Image.open(io.BytesIO(pix.tobytes())) # แปลงเป็น PIL Image
-            
-            # แสดง Preview
-            st.markdown(f"**👁️ ตัวอย่างเอกสาร (หน้า {page_num}):**")
-            st.image(pil_image, use_container_width=True, caption=f"Preview Page {page_num}")
-            
-            # ปุ่มกด Start OCR
-            btn_ocr = st.button("🔍 แปลงภาพเป็นข้อความ (Start AI OCR)", type="primary", use_container_width=True, disabled=(not api_key or not pil_image))
+        with col_prev:
+            if st.button("⬅️ หน้าก่อนหน้า", use_container_width=True, disabled=(st.session_state['current_page_index'] == 0)):
+                st.session_state['current_page_index'] -= 1
+                st.rerun()
 
-    with col_right:
-        st.markdown("### 2. ผลลัพธ์ (Extracted Text)")
+        with col_nav_info:
+            st.markdown(f"<h4 style='text-align: center;'>📄 หน้า {st.session_state['current_page_index'] + 1} จาก {total_pages}</h4>", unsafe_allow_html=True)
+
+        with col_next:
+            if st.button("หน้าถัดไป ➡️", use_container_width=True, disabled=(st.session_state['current_page_index'] == total_pages - 1)):
+                st.session_state['current_page_index'] += 1
+                st.rerun()
+
+        # --- Dual View (ซ้ายรูป | ขวาข้อความ) ---
+        col_left_view, col_right_view = st.columns([1, 1])
         
-        # สร้างพื้นที่รอผลลัพธ์
-        output_box = st.empty()
+        curr_idx = st.session_state['current_page_index']
         
-        if uploaded_file and pil_image and 'btn_ocr' in locals() and btn_ocr:
+        with col_left_view:
+            st.info("👁️ ต้นฉบับ (PDF Preview)")
+            # แสดงรูปของหน้านั้น
+            st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True, caption=f"Page {curr_idx+1}")
+
+        with col_right_view:
+            st.success("📝 ผลลัพธ์ (Editable Text)")
+            # แสดงข้อความของหน้านั้น (User แก้ไขได้ด้วย!)
+            edited_text = st.text_area(
+                label="ocr_output",
+                value=st.session_state['ocr_results'][curr_idx],
+                height=600,
+                label_visibility="collapsed",
+                key=f"text_area_{curr_idx}" # Unique key per page
+            )
+            # อัปเดตค่ากลับเข้าไปใน Memory เผื่อ User แก้ไขคำผิด
+            st.session_state['ocr_results'][curr_idx] = edited_text
+
+        # 3. Export Button (ลอยอยู่ด้านล่าง)
+        st.markdown("---")
+        col_export, _ = st.columns([1, 3])
+        with col_export:
+            # สร้างไฟล์ Word จากข้อมูลทั้งหมดใน Session State
+            docx_file = create_word_docx(st.session_state['ocr_results'])
             
-            full_extracted_text = ""
-            output_box.text_area("ผลลัพธ์", "🤖 AI กำลังสแกนเอกสาร...", height=600)
-            
-            try:
-                # เรียกใช้งานแบบ Stream
-                stream_generator = perform_ocr(api_key, pil_image, selected_model)
-                
-                for chunk in stream_generator:
-                    full_extracted_text += chunk
-                    # อัปเดตข้อความสดๆ
-                    output_box.text_area("ผลลัพธ์", full_extracted_text, height=600)
-                
-                # เสร็จแล้ว
-                st.success("✅ OCR เสร็จเรียบร้อย!")
-                
-            except Exception as e:
-                st.error(f"เกิดข้อผิดพลาด: {e}")
-        
-        elif not uploaded_file:
-            st.info("👈 กรุณาอัปโหลดไฟล์ PDF ทางด้านซ้าย")
-        elif uploaded_file and not btn_ocr:
-            st.info("👈 กดปุ่ม 'Start AI OCR' เพื่อเริ่มทำงาน")
+            st.download_button(
+                label="💾 ดาวน์โหลดเป็น Word (.docx)",
+                data=docx_file,
+                file_name="ocr_result.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+                use_container_width=True
+            )
