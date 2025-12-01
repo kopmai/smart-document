@@ -6,7 +6,8 @@ from modules.comparator import TextComparator
 from modules.code_view import render_code_compare_mode
 from modules.spell_check_view import render_spell_check_mode
 from modules.ocr_view import render_ocr_mode
-from modules.document_view import render_document_compare_mode # <--- Import ตัวใหม่
+from modules.document_view import render_document_compare_mode
+from modules.quick_convert_view import render_quick_convert_mode # <--- Import น้องใหม่
 import streamlit.components.v1 as components
 
 # --- 1. CONFIG & STYLES ---
@@ -39,7 +40,6 @@ st.markdown("""
             border-left: 1px solid #dee2e6; padding-left: 15px;
         }
 
-        /* Sidebar Styling */
         section[data-testid="stSidebar"] { top: 50px !important; background-color: #f8f9fa; }
         
         div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
@@ -66,12 +66,13 @@ with st.sidebar:
     app_mode = option_menu(
         menu_title="รายการระบบ", 
         options=[
+            "แก้ PDF เพี้ยน (Quick Fix)", # <--- เมนูใหม่ เอาไว้บนสุดเพราะน่าจะใช้บ่อย
             "แปลง PDF เป็นข้อความ (AI OCR)",
             "เปรียบเทียบเอกสาร",
             "ตรวจการสะกดคำ",
             "เปรียบเทียบโค้ด"
         ],
-        icons=['qr-code-scan', 'file-earmark-diff', 'spellcheck', 'code-slash'], 
+        icons=['magic', 'qr-code-scan', 'file-earmark-diff', 'spellcheck', 'code-slash'], # เพิ่มไอคอน magic
         menu_icon="grid-fill", 
         default_index=0,
         styles={
@@ -84,9 +85,11 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Contextual Info (เหลือแค่ Tips เล็กน้อย ไม่ต้องมี Input แล้ว)
-    if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
-        st.info("💡 **Tips:** ใช้ AI แปลงภาพเอกสาร PDF ให้เป็นข้อความ Text/Word")
+    if app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
+        st.info("💡 **Fast Track:** แปลงไฟล์ PDF ที่ก๊อปแล้วเป็นภาษาต่างดาว ให้เป็น Word ทันที")
+
+    elif app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+        st.info("💡 **Advanced:** อ่านเอกสารทีละหน้า พร้อมตรวจสอบและแก้ไขข้อความ")
 
     elif app_mode == "เปรียบเทียบเอกสาร":
         st.info("💡 **Tips:** อัปโหลดไฟล์ที่กล่องด้านขวา เพื่อเริ่มเปรียบเทียบ")
@@ -99,18 +102,22 @@ with st.sidebar:
 
 # --- 3. MAIN LOGIC (Controller) ---
 
-# 1. OCR
-if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+# 1. Quick Fix (มาใหม่)
+if app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
+    render_quick_convert_mode()
+
+# 2. Advanced OCR
+elif app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
     render_ocr_mode()
 
-# 2. Compare Docs (เรียกฟังก์ชันใหม่)
+# 3. Compare Docs
 elif app_mode == "เปรียบเทียบเอกสาร":
     render_document_compare_mode()
 
-# 3. Spell Check
+# 4. Spell Check
 elif app_mode == "ตรวจการสะกดคำ":
     render_spell_check_mode()
 
-# 4. Compare Code
+# 5. Compare Code
 elif app_mode == "เปรียบเทียบโค้ด":
     render_code_compare_mode("all")
