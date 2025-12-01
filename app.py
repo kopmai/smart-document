@@ -7,7 +7,8 @@ from modules.spell_check_view import render_spell_check_mode
 import streamlit.components.v1 as components
 
 # --- 1. CONFIG & STYLES ---
-st.set_page_config(layout="wide", page_title="Pro Document Comparator", page_icon="⚖️")
+# เปลี่ยนชื่อตรง Tab Browser
+st.set_page_config(layout="wide", page_title="Smart Document - Intelligent Platform", page_icon="📑")
 
 st.markdown("""
     <style>
@@ -26,42 +27,65 @@ st.markdown("""
             z-index: 99999; display: flex; align-items: center; padding-left: 80px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-        .navbar-logo { font-size: 22px; font-weight: 600; color: #2b5876; display: flex; align-items: center; gap: 10px; }
+        
+        .navbar-logo { 
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #0d6efd; /* เปลี่ยนสี Logo เป็นสีฟ้าให้ดู Smart */
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            letter-spacing: 0.5px;
+        }
+        .navbar-tagline {
+            font-size: 14px; 
+            color: #6c757d; 
+            margin-left: 15px; 
+            font-weight: 300;
+            border-left: 1px solid #dee2e6;
+            padding-left: 15px;
+        }
 
         div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
             border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; 
         }
         
         .css-card { background-color: white; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eef0f2; margin-top: -15px; }
-        .match-badge { background-color: #2b5876; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
+        .match-badge { background-color: #0d6efd; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
         section[data-testid="stSidebar"] { top: 60px !important; background-color: #f8f9fa; }
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
         
         .nav-link-selected { font-weight: 600 !important; }
     </style>
-    <div class="top-navbar"><div class="navbar-logo"><span>⚖️</span> DocCompare <span style="font-size: 14px; color: #adb5bd; margin-left: 10px; font-weight: 300;">| ระบบเปรียบเทียบเอกสารและโค้ด</span></div></div>
+    
+    <div class="top-navbar">
+        <div class="navbar-logo">
+            <span>📑</span> Smart Document
+            <span class="navbar-tagline">ระบบจัดการเอกสารอัจฉริยะ (Compare / Proofread / OCR)</span>
+        </div>
+    </div>
 """, unsafe_allow_html=True)
 
 # --- 2. SIDEBAR (MENU) ---
 with st.sidebar:
     
-    # --- เปลี่ยนชื่อหัวข้อตรงนี้ครับ ---
     app_mode = option_menu(
-        menu_title="รายการระบบ",  # <--- แก้ไขแล้ว
-        options=["เปรียบเทียบเอกสาร", "เปรียบเทียบโค้ด", "ตรวจการสะกดคำ (AI)"],
-        icons=['file-earmark-diff', 'code-slash', 'spellcheck'],
-        menu_icon="cast",
+        menu_title="รายการระบบ", 
+        options=["เปรียบเทียบเอกสาร", "เปรียบเทียบโค้ด", "ตรวจการสะกดคำ (AI)", "OCR แปลงภาพเป็นข้อความ"],
+        icons=['file-earmark-diff', 'code-slash', 'spellcheck', 'qr-code-scan'], 
+        menu_icon="grid-fill", 
         default_index=0,
         styles={
             "container": {"padding": "5px", "background-color": "#f8f9fa"},
-            "icon": {"color": "#2b5876", "font-size": "20px"}, 
-            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"5px", "--hover-color": "#eef0f2"},
-            "nav-link-selected": {"background-color": "#2b5876", "color": "white"},
+            "icon": {"color": "#0d6efd", "font-size": "18px"}, 
+            "nav-link": {"font-size": "15px", "text-align": "left", "margin":"5px", "--hover-color": "#eef0f2"},
+            "nav-link-selected": {"background-color": "#0d6efd", "color": "white"}, # ปรับธีมเป็นสีฟ้า Smart Blue
         }
     )
     
     st.markdown("---")
     
+    # --- Contextual Sidebar Content ---
     if app_mode == "เปรียบเทียบเอกสาร":
         st.markdown("### 📂 Upload Files")
         file1 = st.file_uploader("ต้นฉบับ (Original)", type=["docx", "pdf"])
@@ -72,11 +96,14 @@ with st.sidebar:
         mode_key = "diff_only" if view_mode == "เฉพาะจุดต่าง" else "all"
         
     elif app_mode == "เปรียบเทียบโค้ด":
-        st.info("💡 แปะโค้ดที่ต้องการเปรียบเทียบลงในช่อง Text Area ด้านขวาได้เลย")
+        st.info("💡 **Tips:** เหมาะสำหรับ Developer ใช้เทียบ Code Change หรือ Config Files")
         mode_key = "all"
 
     elif app_mode == "ตรวจการสะกดคำ (AI)":
-        st.info("💡 ใช้ AI ช่วยตรวจทานภาษาไทย/อังกฤษ พร้อมแก้คำผิดและจัดรูปประโยค")
+        st.info("💡 **Tips:** ใช้ AI ช่วยตรวจสอบความถูกต้องของไวยากรณ์และรูปประโยค")
+    
+    elif app_mode == "OCR แปลงภาพเป็นข้อความ":
+        st.warning("🚧 **Coming Soon:** ระบบแปลงภาพสแกนเป็นข้อความ (AI OCR) กำลังอยู่ในระหว่างการพัฒนา")
 
 # --- 3. MAIN LOGIC (Controller) ---
 
@@ -100,7 +127,7 @@ if app_mode == "เปรียบเทียบเอกสาร":
                 
                 with col_count:
                     if search_query:
-                        badge_color = "#2b5876" if match_count > 0 else "#dc3545"
+                        badge_color = "#0d6efd" if match_count > 0 else "#dc3545"
                         msg = f"เจอ {match_count} จุด" if match_count > 0 else "ไม่พบข้อมูล"
                         st.markdown(f"<div style='text-align:right; padding-top: 8px;'><span class='match-badge' style='background-color:{badge_color};'>{msg}</span></div>", unsafe_allow_html=True)
 
@@ -124,3 +151,14 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตรวจการสะกดคำ (AI)":
     render_spell_check_mode()
+
+elif app_mode == "OCR แปลงภาพเป็นข้อความ":
+    # หน้า Placeholder สำหรับ OCR
+    st.markdown("""
+        <div style="text-align: center; padding: 50px; background-color: white; border-radius: 10px; border: 2px dashed #ddd;">
+            <h1>📷 AI OCR System</h1>
+            <h3 style="color: #888;">Coming Soon...</h3>
+            <p>ระบบแปลงภาพเอกสารเป็นข้อความด้วย AI ความแม่นยำสูง</p>
+            <p><i>(เตรียมพบกันในเวอร์ชันถัดไป ของ Smart Document)</i></p>
+        </div>
+    """, unsafe_allow_html=True)
