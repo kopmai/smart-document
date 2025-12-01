@@ -3,18 +3,7 @@ import google.generativeai as genai
 import fitz  # PyMuPDF
 from PIL import Image
 import io
-from docx import Document # สำหรับสร้างไฟล์ Word
-
-# --- SESSION STATE MANAGEMENT ---
-# เราต้องเก็บข้อมูลไว้ใน Session State เพื่อให้กดเปลี่ยนหน้าแล้วข้อมูลไม่หาย
-if 'ocr_results' not in st.session_state:
-    st.session_state['ocr_results'] = [] # เก็บข้อความแต่ละหน้า
-if 'ocr_images' not in st.session_state:
-    st.session_state['ocr_images'] = [] # เก็บรูปภาพแต่ละหน้า (Preview)
-if 'current_page_index' not in st.session_state:
-    st.session_state['current_page_index'] = 0
-if 'processed_file_id' not in st.session_state:
-    st.session_state['processed_file_id'] = None # เอาไว้เช็คว่าเปลี่ยนไฟล์ใหม่หรือยัง
+from docx import Document
 
 def get_available_models(api_key):
     try:
@@ -55,7 +44,7 @@ def create_word_docx(text_list):
     for i, text in enumerate(text_list):
         doc.add_heading(f'Page {i+1}', level=1)
         doc.add_paragraph(text)
-        doc.add_page_break() # ขึ้นหน้าใหม่ตามต้นฉบับ
+        doc.add_page_break()
         
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -63,7 +52,18 @@ def create_word_docx(text_list):
     return buffer
 
 def render_ocr_mode():
-    # 1. ส่วนตั้งค่า (อยู่บนสุด แบบพับเก็บได้)
+    # --- FIX: ย้าย Session State Init มาไว้ในฟังก์ชัน (รับประกันว่าทำงานชัวร์) ---
+    if 'ocr_results' not in st.session_state:
+        st.session_state['ocr_results'] = [] 
+    if 'ocr_images' not in st.session_state:
+        st.session_state['ocr_images'] = []
+    if 'current_page_index' not in st.session_state:
+        st.session_state['current_page_index'] = 0
+    if 'processed_file_id' not in st.session_state:
+        st.session_state['processed_file_id'] = None
+    # -----------------------------------------------------------------------
+
+    # 1. ส่วนตั้งค่า (Top Expander)
     with st.expander("⚙️ ตั้งค่าและอัปโหลดไฟล์ (Settings & Upload)", expanded=True):
         col_key, col_model = st.columns([1, 1])
         
@@ -90,16 +90,16 @@ def render_ocr_mode():
 
         # ปุ่มเริ่มทำงาน (Start)
         if uploaded_file and api_key and selected_model:
-            # เช็คว่าไฟล์เปลี่ยนใหม่ไหม? ถ้าเปลี่ยนให้เคลียร์ค่าเก่า
+            # เช็คว่าไฟล์เปลี่ยนใหม่ไหม
             if st.session_state['processed_file_id'] != uploaded_file.file_id:
                 st.session_state['ocr_results'] = []
                 st.session_state['ocr_images'] = []
                 st.session_state['current_page_index'] = 0
-                st.session_state['processed_file_id'] = None # Reset flag
+                st.session_state['processed_file_id'] = None 
 
             if st.button("🚀 เริ่มประมวลผล (Start Processing All Pages)", type="primary"):
                 
-                # Step A: แปลง PDF เป็นรูปภาพทั้งหมดก่อน
+                # Step A: แปลง PDF เป็นรูป
                 with st.spinner("📦 กำลังแยกหน้า PDF เป็นรูปภาพ..."):
                     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
                     temp_images = []
@@ -110,30 +110,27 @@ def render_ocr_mode():
                         temp_images.append(img)
                     
                     st.session_state['ocr_images'] = temp_images
-                    st.session_state['ocr_results'] = [""] * len(temp_images) # จองที่ว่างไว้
-                    st.session_state['processed_file_id'] = uploaded_file.file_id # Mark as processed
+                    st.session_state['ocr_results'] = [""] * len(temp_images)
+                    st.session_state['processed_file_id'] = uploaded_file.file_id
 
-                # Step B: ส่งรูปไป OCR ทีละหน้า (พร้อม Progress Bar)
+                # Step B: OCR ทีละหน้า
                 progress_bar = st.progress(0, text="กำลังเริ่ม OCR...")
                 total_pages = len(st.session_state['ocr_images'])
                 
                 for i, img in enumerate(st.session_state['ocr_images']):
                     progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
-                    
-                    # Call AI
                     text_result = ocr_single_image(api_key, img, selected_model)
                     st.session_state['ocr_results'][i] = text_result
                 
                 progress_bar.progress(1.0, text="เสร็จเรียบร้อย!")
-                st.rerun() # รีเฟรชหน้าจอเพื่อโชว์ผลลัพธ์
+                st.rerun()
 
     # 2. ส่วนแสดงผล (Synced View)
-    # จะแสดงก็ต่อเมื่อมีข้อมูลใน Session State แล้ว
-    if st.session_state['processed_file_id'] and st.session_state['ocr_results']:
+    # ใช้ .get() เพื่อป้องกัน KeyError หรือเช็คว่ามีค่าไหม
+    if st.session_state.get('processed_file_id') and st.session_state.get('ocr_results'):
         
         st.markdown("---")
         
-        # --- Controller (ปุ่มเปลี่ยนหน้า) ---
         total_pages = len(st.session_state['ocr_images'])
         col_prev, col_nav_info, col_next = st.columns([1, 4, 1])
         
@@ -150,36 +147,30 @@ def render_ocr_mode():
                 st.session_state['current_page_index'] += 1
                 st.rerun()
 
-        # --- Dual View (ซ้ายรูป | ขวาข้อความ) ---
         col_left_view, col_right_view = st.columns([1, 1])
-        
         curr_idx = st.session_state['current_page_index']
         
         with col_left_view:
             st.info("👁️ ต้นฉบับ (PDF Preview)")
-            # แสดงรูปของหน้านั้น
-            st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True, caption=f"Page {curr_idx+1}")
+            if curr_idx < len(st.session_state['ocr_images']):
+                st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True, caption=f"Page {curr_idx+1}")
 
         with col_right_view:
             st.success("📝 ผลลัพธ์ (Editable Text)")
-            # แสดงข้อความของหน้านั้น (User แก้ไขได้ด้วย!)
-            edited_text = st.text_area(
-                label="ocr_output",
-                value=st.session_state['ocr_results'][curr_idx],
-                height=600,
-                label_visibility="collapsed",
-                key=f"text_area_{curr_idx}" # Unique key per page
-            )
-            # อัปเดตค่ากลับเข้าไปใน Memory เผื่อ User แก้ไขคำผิด
-            st.session_state['ocr_results'][curr_idx] = edited_text
+            if curr_idx < len(st.session_state['ocr_results']):
+                edited_text = st.text_area(
+                    label="ocr_output",
+                    value=st.session_state['ocr_results'][curr_idx],
+                    height=600,
+                    label_visibility="collapsed",
+                    key=f"text_area_{curr_idx}"
+                )
+                st.session_state['ocr_results'][curr_idx] = edited_text
 
-        # 3. Export Button (ลอยอยู่ด้านล่าง)
         st.markdown("---")
         col_export, _ = st.columns([1, 3])
         with col_export:
-            # สร้างไฟล์ Word จากข้อมูลทั้งหมดใน Session State
             docx_file = create_word_docx(st.session_state['ocr_results'])
-            
             st.download_button(
                 label="💾 ดาวน์โหลดเป็น Word (.docx)",
                 data=docx_file,
