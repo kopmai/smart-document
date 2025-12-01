@@ -66,28 +66,30 @@ with st.sidebar:
     app_mode = option_menu(
         menu_title="รายการระบบ", 
         options=[
-            "แปลง PDF เป็นข้อความ (AI OCR)",  # <--- อันดับ 1
-            "แก้ PDF เพี้ยน (Quick Fix)",     # <--- อันดับ 2
+            "AI OCR (แปลง PDF)",          # <--- ปรับชื่อให้สั้นลง กระชับขึ้น (เดิม: แปลง PDF เป็นข้อความ (AI OCR))
+            "แก้ PDF เพี้ยน (Quick Fix)",
             "เปรียบเทียบเอกสาร",
             "ตรวจการสะกดคำ",
             "เปรียบเทียบโค้ด"
         ],
-        # สลับไอคอนตามด้วย: qr-code-scan ขึ้นก่อน magic
         icons=['qr-code-scan', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash'], 
         menu_icon="grid-fill", 
         default_index=0,
         styles={
             "container": {"padding": "5px", "background-color": "#f8f9fa"},
-            "icon": {"color": "#0d6efd", "font-size": "18px"}, 
-            "nav-link": {"font-size": "15px", "text-align": "left", "margin":"5px", "--hover-color": "#eef0f2"},
+            "icon": {"color": "#0d6efd", "font-size": "16px"}, # ลดขนาดไอคอนนิดนึง
+            # ลดขนาด Font เหลือ 14px และปรับ Margin ให้ชิดขึ้น
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"2px", "--hover-color": "#eef0f2"},
             "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
+            # เพิ่ม Style ให้หัวข้อเมนูไม่ตกบรรทัด
+            "menu-title": {"color": "#495057", "font-size": "16px", "font-weight": "bold", "margin-bottom": "10px"}
         }
     )
     
     st.markdown("---")
     
-    # Contextual Info
-    if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+    # --- ปรับเงื่อนไข IF ให้ตรงกับชื่อใหม่ ---
+    if app_mode == "AI OCR (แปลง PDF)":
         st.info("💡 **Advanced:** อ่านเอกสารทีละหน้า พร้อมตรวจสอบและแก้ไขข้อความ")
 
     elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
@@ -104,8 +106,8 @@ with st.sidebar:
 
 # --- 3. MAIN LOGIC (Controller) ---
 
-# 1. AI OCR (Full Feature)
-if app_mode == "แปลง PDF เป็นข้อความ (AI OCR)":
+# 1. OCR (ชื่อใหม่)
+if app_mode == "AI OCR (แปลง PDF)":
     render_ocr_mode()
 
 # 2. Quick Fix
