@@ -78,16 +78,28 @@ with st.sidebar:
             "---",
             "ตั้งค่า & ประวัติ"
         ],
-        # --- FIX: เปลี่ยนไอคอนตัวแรกเป็น 'file-earmark-text' ---
         icons=['file-earmark-text', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash', '', 'gear'], 
-        # -----------------------------------------------------
         menu_icon="grid-fill", 
         default_index=0,
         styles={
             "container": {"padding": "5px", "background-color": "#f8f9fa"},
-            "icon": {"color": "#0d6efd", "font-size": "16px"}, 
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"2px", "--hover-color": "#eef0f2"},
+            
+            # --- FIX: เอา "color": "#0d6efd" ออก เพื่อให้สีเปลี่ยนตามสถานะ ---
+            "icon": {"font-size": "16px"}, 
+            # -------------------------------------------------------------
+            
+            # ปรับสีข้อความตอนปกติ (Unselected) ให้เป็นสีเทาเข้ม
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "left", 
+                "margin": "2px", 
+                "--hover-color": "#eef0f2",
+                "color": "#495057" # สีเทาเข้ม (Icon จะเป็นสีนี้ด้วยตอนปกติ)
+            },
+            
+            # สีตอนถูกเลือก (Selected) -> สีขาว (Icon จะขาวตาม)
             "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
+            
             "menu-title": {"color": "#495057", "font-size": "16px", "font-weight": "bold", "margin-bottom": "10px"}
         }
     )
@@ -126,3 +138,4 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
+
