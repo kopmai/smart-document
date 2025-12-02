@@ -1,49 +1,61 @@
 import streamlit as st
-from modules.utils import get_logs_dataframe, set_api_key, get_api_key
+from modules.utils import get_logs_dataframe
 
 def render_settings_page():
-    st.markdown("## ⚙️ ตั้งค่าและประวัติการใช้งาน (Settings & Logs)")
+    st.markdown("## 📜 ประวัติการใช้งาน (History Logs)")
+    st.caption("บันทึกกิจกรรมต่างๆ ที่เกิดขึ้นในระบบ (Session Log)")
     
-    tab_settings, tab_logs = st.tabs(["🔑 ตั้งค่าระบบ (Settings)", "📜 ประวัติการใช้งาน (History Logs)"])
+    # ดึงข้อมูล Log
+    df = get_logs_dataframe()
     
-    # === TAB 1: SETTINGS ===
-    with tab_settings:
-        st.info("ตั้งค่าครั้งเดียว ใช้ได้ทุกโมดูลในระบบ")
-        
-        current_key = get_api_key()
-        new_key = st.text_input("🔑 Gemini API Key (Global)", value=current_key, type="password")
-        
-        if new_key != current_key:
-            set_api_key(new_key)
-            st.success("✅ บันทึก API Key เรียบร้อยแล้ว (ไปหน้าอื่นได้เลย)")
-            
+    if not df.empty:
+        # 1. สรุปสถิติ (Metrics)
         st.markdown("---")
-        st.caption("เวอร์ชันระบบ: Smart Document v1.2 (Beta)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📝 ทำรายการไปแล้ว", f"{len(df)} ครั้ง")
+        with col2:
+            st.metric("🕒 ล่าสุดเมื่อ", df.iloc[0]['Timestamp'].split(' ')[1])
+        with col3:
+            status = df.iloc[0]['Status']
+            # ใส่สีให้สถานะหน่อย
+            if status == "Success":
+                st.metric("สถานะล่าสุด", "✅ สำเร็จ")
+            else:
+                st.metric("สถานะล่าสุด", "❌ ผิดพลาด")
+        
+        st.markdown("---")
 
-    # === TAB 2: LOGS ===
-    with tab_logs:
-        st.markdown("### 📊 บันทึกกิจกรรม (Session Activity)")
+        # 2. ตาราง Log (ปรับแต่งให้สวยงาม)
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Timestamp": st.column_config.TextColumn("เวลา (Time)", width="medium"),
+                "Action": st.column_config.TextColumn("กิจกรรม (Action)", width="medium"),
+                "Detail": st.column_config.TextColumn("รายละเอียด (Detail)", width="large"),
+                "Status": st.column_config.TextColumn("สถานะ (Status)", width="small"),
+            }
+        )
         
-        df = get_logs_dataframe()
-        
-        if not df.empty:
-            # สรุปสถิติเล็กๆ
-            col1, col2, col3 = st.columns(3)
-            col1.metric("ทำรายการไปแล้ว", f"{len(df)} ครั้ง")
-            col2.metric("ล่าสุดเมื่อ", df.iloc[0]['Timestamp'].split(' ')[1])
-            col3.metric("สถานะล่าสุด", df.iloc[0]['Status'])
-            
-            # ตาราง Log
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            # ปุ่ม Download CSV
+        # 3. ปุ่ม Download
+        col_dl, _ = st.columns([1, 4])
+        with col_dl:
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "📥 ดาวน์โหลดประวัติ (CSV)",
-                csv,
-                "smart_doc_logs.csv",
-                "text/csv",
-                key='download-csv'
+                label="📥 ดาวน์โหลดประวัติ (CSV)",
+                data=csv,
+                file_name="smart_doc_logs.csv",
+                mime="text/csv",
+                type="primary"
             )
-        else:
-            st.info("ยังไม่มีประวัติการใช้งานในรอบนี้")
+            
+    else:
+        # กรณีไม่มี Log
+        st.info("ℹ️ ยังไม่มีประวัติการใช้งานในรอบนี้ (ลองไปใช้งานเมนูอื่นๆ ดูก่อนนะครับ)")
+        
+    # --- Footer ---
+    st.markdown("---")
+    st.caption("🔒 **Security Note:** API Key ถูกจัดการผ่านระบบ Secrets หลังบ้านเพื่อความปลอดภัยสูงสุด")
+    st.caption("Version: Smart Document v1.0 (Final Release)")
