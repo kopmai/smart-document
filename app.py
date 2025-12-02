@@ -8,6 +8,7 @@ from modules.spell_check_view import render_spell_check_mode
 from modules.ocr_view import render_ocr_mode
 from modules.document_view import render_document_compare_mode
 from modules.quick_convert_view import render_quick_convert_mode
+from modules.settings_view import render_settings_page # <--- Import ใหม่
 import streamlit.components.v1 as components
 
 # --- 1. CONFIG & STYLES ---
@@ -66,62 +67,52 @@ with st.sidebar:
     app_mode = option_menu(
         menu_title="รายการระบบ", 
         options=[
-            "AI OCR (แปลง PDF)",          # <--- ปรับชื่อให้สั้นลง กระชับขึ้น (เดิม: แปลง PDF เป็นข้อความ (AI OCR))
+            "AI OCR (แปลง PDF)",
             "แก้ PDF เพี้ยน (Quick Fix)",
             "เปรียบเทียบเอกสาร",
             "ตรวจการสะกดคำ",
-            "เปรียบเทียบโค้ด"
+            "เปรียบเทียบโค้ด",
+            "---", # ตัวคั่น
+            "ตั้งค่า & ประวัติ" # <--- เมนูใหม่
         ],
-        icons=['qr-code-scan', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash'], 
+        icons=['qr-code-scan', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash', '', 'gear'], 
         menu_icon="grid-fill", 
         default_index=0,
         styles={
             "container": {"padding": "5px", "background-color": "#f8f9fa"},
-            "icon": {"color": "#0d6efd", "font-size": "16px"}, # ลดขนาดไอคอนนิดนึง
-            # ลดขนาด Font เหลือ 14px และปรับ Margin ให้ชิดขึ้น
+            "icon": {"color": "#0d6efd", "font-size": "16px"}, 
             "nav-link": {"font-size": "14px", "text-align": "left", "margin":"2px", "--hover-color": "#eef0f2"},
             "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
-            # เพิ่ม Style ให้หัวข้อเมนูไม่ตกบรรทัด
             "menu-title": {"color": "#495057", "font-size": "16px", "font-weight": "bold", "margin-bottom": "10px"}
         }
     )
     
     st.markdown("---")
     
-    # --- ปรับเงื่อนไข IF ให้ตรงกับชื่อใหม่ ---
+    # Contextual Info
     if app_mode == "AI OCR (แปลง PDF)":
         st.info("💡 **Advanced:** อ่านเอกสารทีละหน้า พร้อมตรวจสอบและแก้ไขข้อความ")
-
     elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
         st.info("💡 **Fast Track:** แปลงไฟล์ PDF ที่ก๊อปแล้วเป็นภาษาต่างดาว ให้เป็น Word ทันที")
-
-    elif app_mode == "เปรียบเทียบเอกสาร":
-        st.info("💡 **Tips:** อัปโหลดไฟล์ที่กล่องด้านขวา เพื่อเริ่มเปรียบเทียบ")
-        
-    elif app_mode == "ตรวจการสะกดคำ":
-        st.info("💡 **Tips:** ใช้ AI ตรวจทานไวยากรณ์และคำผิด")
-        
-    elif app_mode == "เปรียบเทียบโค้ด":
-        st.info("💡 **Tips:** เทียบ Code Change หรือ Config Files")
+    elif app_mode == "ตั้งค่า & ประวัติ":
+        st.info("⚙️ จัดการ API Key และดูประวัติการใช้งานย้อนหลัง")
 
 # --- 3. MAIN LOGIC (Controller) ---
 
-# 1. OCR (ชื่อใหม่)
 if app_mode == "AI OCR (แปลง PDF)":
     render_ocr_mode()
 
-# 2. Quick Fix
 elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
     render_quick_convert_mode()
 
-# 3. Compare Docs
 elif app_mode == "เปรียบเทียบเอกสาร":
     render_document_compare_mode()
 
-# 4. Spell Check
 elif app_mode == "ตรวจการสะกดคำ":
     render_spell_check_mode()
 
-# 5. Compare Code
 elif app_mode == "เปรียบเทียบโค้ด":
     render_code_compare_mode("all")
+
+elif app_mode == "ตั้งค่า & ประวัติ":
+    render_settings_page() # <--- เรียกหน้า Settings
