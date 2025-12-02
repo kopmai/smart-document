@@ -58,7 +58,7 @@ st.markdown("""
             align-items: center; 
             
             /* เว้นซ้าย 60px ให้ปุ่ม Hamburger (เพราะปุ่มมันลอยอยู่ตำแหน่งเดิม) */
-            padding-left: 60px; 
+            padding-left: 0px; 
             
             width: 100%;
             margin-bottom: 20px; /* เว้นระยะห่างจากเนื้อหาด้านล่าง */
@@ -67,8 +67,8 @@ st.markdown("""
         /* --- 3. SIDEBAR (ปรับให้เต็มจอสวยๆ) --- */
         section[data-testid="stSidebar"] { 
             top: 0px !important;
-            height: 100vh !important;
-            padding-top: 50px !important; /* ดันเมนูลงมานิดนึง */
+            height: 0vh !important;
+            padding-top: 0px !important; /* ดันเมนูลงมานิดนึง */
             background-color: #f8f9fa;
             box-shadow: 1px 0 5px rgba(0,0,0,0.05);
         }
@@ -167,3 +167,4 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
+
