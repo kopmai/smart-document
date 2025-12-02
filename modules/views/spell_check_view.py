@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-from modules.comparator import TextComparator
+from modules.services.comparator import TextComparator
 
 def get_available_models(api_key):
     """ดึงรายชื่อโมเดลทั้งหมดที่ Key นี้ใช้ได้จริง"""
