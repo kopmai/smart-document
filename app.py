@@ -19,15 +19,16 @@ st.set_page_config(layout="wide", page_title="Smart Document - Intelligent Platf
 
 st.markdown("""
     <style>
-        /* ... (Import Fonts เหมือนเดิม) ... */
+        /* Import Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
+        /* Global Font */
         html, body, [class*="css"], font, button, input, textarea, div { 
             font-family: 'Kanit', sans-serif !important; 
         }
         
-        /* --- 1. NAVBAR --- */
+        /* --- 1. NAVBAR (แถบบนสุด) --- */
         .top-navbar {
             position: fixed; 
             top: 0; 
@@ -36,50 +37,69 @@ st.markdown("""
             height: 60px;
             background-color: #ffffff; 
             border-bottom: 1px solid #e0e0e0;
-            z-index: 9999; 
+            z-index: 99999; /* อยู่เหนือทุกอย่าง */
             display: flex; 
             align-items: center; 
-            padding-left: 80px; 
+            padding-left: 80px; /* เว้นที่ให้ปุ่ม Hamburger */
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
-        /* --- 2. HEADER --- */
+        /* --- 2. STREAMLIT HEADER (ซ่อน Header เดิมทิ้งไปเลยเพื่อลดช่องว่าง) --- */
         header[data-testid="stHeader"] { 
-            background-color: transparent !important; 
-            z-index: 10000 !important; 
+            background-color: transparent !important;
+            z-index: 100000 !important; /* ให้ปุ่ม Hamburger อยู่เหนือ Navbar เรา */
         }
-        div[data-testid="stDecoration"] { display: none; }
         
-        /* --- 3. SIDEBAR --- */
+        /* ซ่อนแถบสีรุ้ง */
+        div[data-testid="stDecoration"] { display: none; }
+        div[data-testid="stToolbar"] { display: none; } /* ซ่อน Toolbar ขวาบนถ้าไม่ใช้ */
+
+        /* --- 3. SIDEBAR (ปรับให้เต็มจอและดันเนื้อหาลง) --- */
         section[data-testid="stSidebar"] { 
-            top: 0px !important;      
-            height: 100vh !important; 
-            z-index: 10001 !important; 
-            padding-top: 50px !important; 
+            top: 0px !important;      /* ชนขอบบนสุด */
+            height: 100vh !important; /* สูงเต็มจอ */
+            z-index: 99998 !important; /* อยู่ใต้ Navbar นิดนึง */
+            padding-top: 60px !important; /* ดันเนื้อหาเมนูลงมา เท่าความสูง Navbar */
             background-color: #f8f9fa;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1); 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        
+        /* ปรับปุ่มปิด Sidebar (x) ให้ลงมาหน่อย */
+        button[kind="header"] {
+            top: 10px !important;
         }
 
-        /* --- 4. MAIN CONTENT (พระเอกของการแก้ครั้งนี้) --- */
+        /* --- 4. MAIN CONTENT (เนื้อหาหลัก) --- */
         .block-container { 
-            /* แก้จาก 80px เหลือ 55px (ให้พอดีกับ Navbar 60px - Margin ธรรมชาติของ Streamlit) */
-            padding-top: 55px !important; 
+            /* ดันเนื้อหาลงมาให้พ้น Navbar (60px) + ระยะห่างนิดหน่อย (20px) */
+            padding-top: 80px !important; 
             padding-bottom: 2rem !important; 
         }
         
-        /* ลบ Margin ส่วนเกินของ Element ตัวแรกสุด (เช่น Expander) ให้ชิดขึ้นไปอีก */
+        /* ลบ Margin ส่วนเกินของ Element ตัวแรกสุด */
         .block-container > div:first-child {
             margin-top: 0px !important;
             padding-top: 0px !important;
         }
         
-        /* ... (Styles อื่นๆ คงเดิม) ... */
-        .navbar-logo { font-size: 22px; font-weight: 600; color: #0d6efd; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
-        .navbar-tagline { font-size: 14px; color: #6c757d; margin-left: 15px; font-weight: 300; border-left: 1px solid #dee2e6; padding-left: 15px; }
-        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; }
+        /* --- Styles อื่นๆ --- */
+        .navbar-logo { 
+            font-size: 22px; font-weight: 600; color: #0d6efd;
+            display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;
+        }
+        .navbar-tagline {
+            font-size: 14px; color: #6c757d; margin-left: 15px; font-weight: 300;
+            border-left: 1px solid #dee2e6; padding-left: 15px;
+        }
+
+        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
+            border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; 
+        }
         .css-card { background-color: white; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eef0f2; margin-top: -15px; }
         .match-badge { background-color: #0d6efd; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
+        
+        /* Option Menu Style */
         .nav-link-selected { font-weight: 600 !important; }
     </style>
     
@@ -90,6 +110,7 @@ st.markdown("""
         </div>
     </div>
 """, unsafe_allow_html=True)
+
 # --- 2. SIDEBAR (MENU) ---
 with st.sidebar:
     
@@ -156,6 +177,3 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
-
-
-
