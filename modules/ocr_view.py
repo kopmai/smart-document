@@ -15,24 +15,40 @@ def get_available_models(api_key):
     except:
         return []
 
-def clean_ocr_text(text):
-    if not text: return ""
-    # ลบ Markdown code block ออก
-    text = text.replace("```csv", "").replace("```", "")
-    
-    lines = text.split('\n')
-    cleaned_lines = []
-    for line in lines:
-        if re.match(r'^[\s\|\-\_\=\:\+]{5,}$', line.strip()):
-            continue
-        cleaned_lines.append(line)
-    return '\n'.join(cleaned_lines)
+def parse_ai_response(raw_text):
+    """
+    แยกเนื้อหา:
+    1. ข้อความทั่วไป (Clean Text) -> สำหรับ Word
+    2. ข้อมูลตาราง (CSV List) -> สำหรับ Excel
+    """
+    if not raw_text: 
+        return "", []
 
-# --- ปรับปรุงให้รองรับ CSV ---
-def ocr_single_image(api_key, image, model_name, output_format="text"):
+    # Regex ค้นหาข้อความที่อยู่ระหว่าง [[TABLE]]...[[/TABLE]]
+    # re.DOTALL เพื่อให้ . ครอบคลุมบรรทัดใหม่ด้วย
+    table_pattern = re.compile(r'\[\[TABLE\]\](.*?)\[\[/TABLE\]\]', re.DOTALL)
+    
+    found_tables = []
+    
+    # ฟังก์ชันสำหรับแทนที่ตารางในข้อความหลักด้วย Marker
+    def replace_with_marker(match):
+        csv_content = match.group(1).strip()
+        if csv_content:
+            found_tables.append(csv_content)
+            return "\n[--- ตรวจพบตาราง: ดูรายละเอียดในไฟล์ Excel ---]\n"
+        return ""
+
+    # 1. สร้าง Clean Text (เอาตารางออกแล้วแปะป้ายแทน)
+    clean_text = table_pattern.sub(replace_with_marker, raw_text)
+    
+    # ล้างบรรทัดว่างส่วนเกิน
+    clean_text = re.sub(r'\n{3,}', '\n\n', clean_text).strip()
+
+    return clean_text, found_tables
+
+def ocr_single_image(api_key, image, model_name):
     try:
         genai.configure(api_key=api_key)
-        
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -41,44 +57,31 @@ def ocr_single_image(api_key, image, model_name, output_format="text"):
         ]
         model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
         
-        if output_format == "csv":
-            # Prompt สำหรับ Excel
-            prompt = """
-            Act as a Data Entry Clerk. 
-            Extract the table data from this image perfectly.
-            - Output STRICTLY in CSV format (Comma Separated Values).
-            - Do NOT use Markdown code blocks. Just raw CSV data.
-            - Handle Thai characters correctly.
-            - If there are merged cells, repeat the value in each cell or handle logically.
-            """
-        else:
-            # Prompt สำหรับ Word (Text)
-            prompt = """
-            Extract all text from this image perfectly.
-            - Preserve the layout (paragraphs, tables) as much as possible.
-            - If Thai text is present, ensure correct spelling.
-            - Do NOT print ASCII borders like |---| if possible, use spacing.
-            """
+        # --- PROMPT สูตรพิเศษ: สั่งให้แยกตารางด้วยแท็ก ---
+        prompt = """
+        Analyze this image and extract content.
+        1. **Text**: Extract normal text with original layout.
+        2. **Tables**: If you see any data table, DO NOT format it as Markdown. 
+           Instead, convert it to CSV format and wrap it strictly within [[TABLE]] and [[/TABLE]] tags.
+           Example:
+           [[TABLE]]
+           Column1,Column2
+           Val1,Val2
+           [[/TABLE]]
+        3. **Thai Language**: Ensure high accuracy.
+        """
         
         response = model.generate_content([prompt, image])
         
-        # ถ้าเป็น CSV ไม่ต้อง clean เส้นตาราง (เดี๋ยวข้อมูลหาย)
-        if output_format == "csv":
-            return response.text.replace("```csv", "").replace("```", "").strip()
-        else:
-            return clean_ocr_text(response.text)
-            
+        # ส่งค่ากลับเป็น Raw Text ก่อน เดี๋ยวไปแยกข้างนอก
+        return response.text
+        
     except Exception as e:
-        return f"[Error on this page: {str(e)}]"
+        return f"[Error: {str(e)}]"
 
 def create_word_docx(text_list):
     doc = Document()
     for i, text in enumerate(text_list):
-        # ข้ามหน้าว่าง (ที่เป็น Excel)
-        if not text or "Error" in text or "," in text and "\n" in text and len(text.split('\n')[0].split(',')) > 1:
-             # Logic เช็ค CSV คร่าวๆ (อาจปรับปรุงได้) แต่เบื้องต้นเราเช็คจาก State ดีกว่า
-             pass 
-             
         doc.add_heading(f'Page {i+1}', level=1)
         doc.add_paragraph(text)
         doc.add_page_break()
@@ -87,31 +90,40 @@ def create_word_docx(text_list):
     buffer.seek(0)
     return buffer
 
-def create_excel_from_results(results_map):
-    """สร้าง Excel จาก Dictionary {page_index: csv_text}"""
+def create_excel_from_tables(all_pages_tables):
+    """
+    all_pages_tables: list ของ list (แต่ละหน้าอาจมีหลายตาราง)
+    Format: [ [table1_p1, table2_p1], [table1_p2], ... ]
+    """
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         has_data = False
-        for page_idx, csv_text in results_map.items():
-            if not csv_text: continue
-            try:
-                df = pd.read_csv(io.StringIO(csv_text))
-                sheet_name = f"Page_{page_idx+1}"
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                has_data = True
-            except:
-                pass
+        
+        for page_idx, tables in enumerate(all_pages_tables):
+            for table_idx, csv_data in enumerate(tables):
+                try:
+                    # แปลง CSV String เป็น DataFrame
+                    df = pd.read_csv(io.StringIO(csv_data))
+                    
+                    # ตั้งชื่อ Sheet: P1_T1 (หน้า 1 ตาราง 1)
+                    sheet_name = f"P{page_idx+1}_Table{table_idx+1}"
+                    
+                    # เขียนลง Excel
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    has_data = True
+                except:
+                    pass
         
         if not has_data:
-            pd.DataFrame({"Info": ["No table data selected"]}).to_excel(writer, sheet_name="Info")
+            pd.DataFrame({"Message": ["ไม่พบตารางในเอกสาร"]}).to_excel(writer, sheet_name="NoTables")
             
     buffer.seek(0)
     return buffer
 
 def render_ocr_mode():
     # --- Session State ---
-    if 'ocr_results' not in st.session_state: st.session_state['ocr_results'] = [] 
-    if 'ocr_types' not in st.session_state: st.session_state['ocr_types'] = [] # เก็บประเภท (text/csv) ของแต่ละหน้า
+    if 'ocr_results_text' not in st.session_state: st.session_state['ocr_results_text'] = [] 
+    if 'ocr_results_tables' not in st.session_state: st.session_state['ocr_results_tables'] = [] 
     if 'ocr_images' not in st.session_state: st.session_state['ocr_images'] = []
     if 'current_page_index' not in st.session_state: st.session_state['current_page_index'] = 0
     if 'processed_file_id' not in st.session_state: st.session_state['processed_file_id'] = None
@@ -142,15 +154,15 @@ def render_ocr_mode():
         if uploaded_file and api_key and selected_model:
             # Check File Change
             if st.session_state['processed_file_id'] != uploaded_file.file_id:
-                # Reset แต่ยังไม่เคลียร์ค่า จนกว่าจะกดเริ่ม
+                # Reset
                 pass
 
             # --- TABS ---
             tab_batch, tab_select = st.tabs(["🚀 แปลงทั้งหมด (Batch)", "👁️ เลือกเฉพาะหน้า (Selective)"])
 
-            # TAB 1: BATCH (Text Only)
+            # TAB 1: BATCH
             with tab_batch:
-                st.info("ℹ️ แปลงทุกหน้าเป็นข้อความ (Word)")
+                st.info("ℹ️ อ่านทุกหน้า + แยกตารางให้อัตโนมัติ")
                 if st.button("🚀 เริ่ม OCR ทุกหน้า", type="primary", use_container_width=True):
                     with st.spinner("📦 กำลังแยกหน้า PDF..."):
                         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
@@ -162,8 +174,8 @@ def render_ocr_mode():
                             temp_images.append(img)
                         
                         st.session_state['ocr_images'] = temp_images
-                        st.session_state['ocr_results'] = [""] * len(temp_images)
-                        st.session_state['ocr_types'] = ["text"] * len(temp_images) # Default text
+                        st.session_state['ocr_results_text'] = [""] * len(temp_images)
+                        st.session_state['ocr_results_tables'] = [[]] * len(temp_images)
                         st.session_state['processed_file_id'] = uploaded_file.file_id
                         st.session_state['current_page_index'] = 0
 
@@ -172,15 +184,22 @@ def render_ocr_mode():
                     
                     for i, img in enumerate(st.session_state['ocr_images']):
                         progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
-                        text_result = ocr_single_image(api_key, img, selected_model, "text")
-                        st.session_state['ocr_results'][i] = text_result
+                        
+                        # Call AI
+                        raw_response = ocr_single_image(api_key, img, selected_model)
+                        
+                        # Parse: แยก Text กับ Tables
+                        clean_text, tables = parse_ai_response(raw_response)
+                        
+                        st.session_state['ocr_results_text'][i] = clean_text
+                        st.session_state['ocr_results_tables'][i] = tables
                     
                     progress_bar.progress(1.0, text="เสร็จเรียบร้อย! (พับกล่องนี้เพื่อดูผลลัพธ์)")
                     st.rerun()
 
-            # TAB 2: SELECTIVE (Text/Excel)
+            # TAB 2: SELECTIVE
             with tab_select:
-                st.info("ℹ️ เลือกหน้าและระบุว่าเป็นตาราง (Excel) หรือข้อความ (Word)")
+                st.info("ℹ️ เลือกเฉพาะหน้า (ระบบจะแยกตารางให้อัตโนมัติเช่นกัน)")
                 
                 if 'ocr_preview_imgs' not in st.session_state or st.session_state.get('ocr_preview_fid') != uploaded_file.file_id:
                     with st.spinner("🖼️ สร้างภาพตัวอย่าง..."):
@@ -197,28 +216,24 @@ def render_ocr_mode():
                 with st.form("ocr_select_form"):
                     images = st.session_state['ocr_preview_imgs']
                     cols = st.columns(4)
-                    selection_map = {} # {index: type}
+                    selected_indices = []
                     
                     for i, img in enumerate(images):
                         col = cols[i % 4]
                         with col:
                             st.image(img, use_container_width=True)
-                            is_selected = st.checkbox(f"เลือกหน้า {i+1}", key=f"ocr_sel_{i}")
-                            is_table = st.toggle(f"เป็นตาราง?", key=f"ocr_tbl_{i}")
-                            
-                            if is_selected:
-                                selection_map[i] = "csv" if is_table else "text"
+                            if st.checkbox(f"หน้า {i+1}", key=f"ocr_sel_{i}"):
+                                selected_indices.append(i)
                     
                     st.markdown("---")
                     submitted = st.form_submit_button("✅ เริ่ม OCR เฉพาะหน้าที่เลือก", type="primary", use_container_width=True)
 
                 if submitted:
-                    if not selection_map:
+                    if not selected_indices:
                         st.warning("กรุณาเลือกอย่างน้อย 1 หน้า")
                     else:
-                        # Reset
-                        st.session_state['ocr_results'] = []
-                        st.session_state['ocr_types'] = []
+                        st.session_state['ocr_results_text'] = []
+                        st.session_state['ocr_results_tables'] = []
                         st.session_state['ocr_images'] = []
                         st.session_state['current_page_index'] = 0
                         st.session_state['processed_file_id'] = uploaded_file.file_id
@@ -226,52 +241,57 @@ def render_ocr_mode():
                         progress_bar = st.progress(0, text="เริ่มทำงาน...")
                         
                         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                        total_sel = len(selection_map)
+                        total_sel = len(selected_indices)
                         current_step = 0
                         
-                        # Process in order
-                        for page_idx, mode in sorted(selection_map.items()):
+                        selected_indices.sort()
+                        
+                        for idx, page_num in enumerate(selected_indices):
                             current_step += 1
-                            progress_bar.progress((current_step / total_sel), text=f"🔍 กำลังอ่านหน้า {page_idx+1} ({mode})...")
+                            progress_bar.progress((current_step / total_sel), text=f"🔍 กำลังอ่านหน้า {page_num+1} ({current_step}/{total_sel})...")
                             
-                            page = doc.load_page(page_idx)
+                            page = doc.load_page(page_num)
                             pix = page.get_pixmap(dpi=150)
                             img = Image.open(io.BytesIO(pix.tobytes()))
                             
                             st.session_state['ocr_images'].append(img)
-                            st.session_state['ocr_types'].append(mode)
                             
-                            text_res = ocr_single_image(api_key, img, selected_model, mode)
-                            st.session_state['ocr_results'].append(text_res)
+                            # Call AI
+                            raw_response = ocr_single_image(api_key, img, selected_model)
+                            # Parse
+                            clean_text, tables = parse_ai_response(raw_response)
+                            
+                            st.session_state['ocr_results_text'].append(clean_text)
+                            st.session_state['ocr_results_tables'].append(tables)
                         
                         progress_bar.progress(1.0, text="เสร็จเรียบร้อย! (พับกล่องนี้เพื่อดูผลลัพธ์)")
                         st.rerun()
 
     # 2. ส่วนแสดงผล (Outside Expander)
     if st.session_state.get('processed_file_id') == uploaded_file.file_id if uploaded_file else False:
-        if st.session_state.get('ocr_results'):
+        if st.session_state.get('ocr_results_text'):
             
-            st.markdown("### 📄 ผลลัพธ์และดาวน์โหลด (Result & Export)")
+            st.markdown("### 📄 ผลลัพธ์ (Result & Export)")
+            
+            # --- Check Data ---
+            has_text = any(st.session_state['ocr_results_text'])
+            # เช็คว่ามีตารางอย่างน้อย 1 หน้าไหม
+            has_tables = any(len(t) > 0 for t in st.session_state['ocr_results_tables'])
             
             # --- Export Buttons ---
-            # เช็คว่ามีผลลัพธ์แบบไหนบ้าง
-            has_text = "text" in st.session_state['ocr_types']
-            has_csv = "csv" in st.session_state['ocr_types']
-            
             col_d1, col_d2 = st.columns(2)
-            if has_text:
-                with col_d1:
-                    # Filter only text results
-                    text_data = [res for res, type_ in zip(st.session_state['ocr_results'], st.session_state['ocr_types']) if type_ == "text"]
-                    docx_file = create_word_docx(text_data)
+            
+            with col_d1:
+                if has_text:
+                    docx_file = create_word_docx(st.session_state['ocr_results_text'])
                     st.download_button("💾 Export Word (.docx)", docx_file, "ocr_result.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
             
-            if has_csv:
-                with col_d2:
-                    # Filter only csv results (map with page index)
-                    csv_map = {i: res for i, (res, type_) in enumerate(zip(st.session_state['ocr_results'], st.session_state['ocr_types'])) if type_ == "csv"}
-                    excel_file = create_excel_from_results(csv_map)
-                    st.download_button("📊 Export Excel (.xlsx)", excel_file, "ocr_tables.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="secondary", use_container_width=True)
+            with col_d2:
+                if has_tables:
+                    excel_file = create_excel_from_tables(st.session_state['ocr_results_tables'])
+                    st.download_button("📊 Export Tables (.xlsx)", excel_file, "ocr_tables.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="secondary", use_container_width=True)
+                else:
+                    st.info("ℹ️ ไม่พบตารางในเอกสาร (ปุ่มโหลด Excel จึงไม่แสดง)")
 
             st.markdown("---")
 
@@ -285,8 +305,13 @@ def render_ocr_mode():
                     st.rerun()
             with col_nav_info:
                 curr = st.session_state['current_page_index']
-                type_label = "📝 ข้อความ" if st.session_state['ocr_types'][curr] == "text" else "📊 ตาราง (CSV)"
-                st.markdown(f"<div style='text-align: center; padding-top: 5px; font-weight: bold;'>หน้า {curr + 1} / {total_pages} • {type_label}</div>", unsafe_allow_html=True)
+                # บอก User ว่าหน้านี้มีตารางไหม
+                table_count = len(st.session_state['ocr_results_tables'][curr])
+                status_msg = f"หน้า {curr + 1} / {total_pages}"
+                if table_count > 0:
+                    status_msg += f" (พบ {table_count} ตาราง ✅)"
+                
+                st.markdown(f"<div style='text-align: center; padding-top: 5px; font-weight: bold;'>{status_msg}</div>", unsafe_allow_html=True)
             with col_next:
                 if st.button("ถัดไป ➡️", use_container_width=True, disabled=(st.session_state['current_page_index'] == total_pages - 1)):
                     st.session_state['current_page_index'] += 1
@@ -302,18 +327,13 @@ def render_ocr_mode():
                     st.image(st.session_state['ocr_images'][curr_idx], use_container_width=True)
 
             with col_right_view:
-                res_type = st.session_state['ocr_types'][curr_idx]
-                if res_type == "text":
-                    st.success("📝 ผลลัพธ์ (แก้ไขได้)")
-                else:
-                    st.warning("📊 ผลลัพธ์ CSV (สำหรับ Excel)")
-                    
-                if curr_idx < len(st.session_state['ocr_results']):
+                st.success("📝 ข้อความหลัก (Main Text)")
+                if curr_idx < len(st.session_state['ocr_results_text']):
                     edited_text = st.text_area(
                         label="ocr_output",
-                        value=st.session_state['ocr_results'][curr_idx],
+                        value=st.session_state['ocr_results_text'][curr_idx],
                         height=800,
                         label_visibility="collapsed",
                         key=f"text_area_{curr_idx}"
                     )
-                    st.session_state['ocr_results'][curr_idx] = edited_text
+                    st.session_state['ocr_results_text'][curr_idx] = edited_text
