@@ -10,12 +10,11 @@ from modules.ocr_view import render_ocr_mode
 from modules.document_view import render_document_compare_mode
 from modules.quick_convert_view import render_quick_convert_mode
 from modules.settings_view import render_settings_page
-from modules.summarize_view import render_summarize_mode # <--- Import ตัวใหม่
+# ลบ summarize_view ออกแล้ว
 
-# --- CONFIG ---
+# --- 1. CONFIG & STYLES ---
 st.set_page_config(layout="wide", page_title="Smart Document - Intelligent Platform", page_icon="📑")
 
-# ... (CSS เดิม ไม่ต้องแก้) ...
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
@@ -34,6 +33,7 @@ st.markdown("""
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
         .nav-link-selected { font-weight: 600 !important; }
     </style>
+    
     <div class="top-navbar">
         <div class="navbar-logo">
             <span>📑</span> Smart Document
@@ -42,21 +42,21 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- 2. SIDEBAR (MENU) ---
 with st.sidebar:
+    
     app_mode = option_menu(
         menu_title="รายการระบบ", 
         options=[
             "AI OCR (แปลง PDF)",
             "แก้ PDF เพี้ยน (Quick Fix)",
-            "สรุปย่อเอกสาร (Summarizer)", # <--- เมนูใหม่
             "เปรียบเทียบเอกสาร",
             "ตรวจการสะกดคำ",
             "เปรียบเทียบโค้ด",
             "---",
             "ตั้งค่า & ประวัติ"
         ],
-        icons=['qr-code-scan', 'magic', 'file-text', 'file-earmark-diff', 'spellcheck', 'code-slash', '', 'gear'], 
+        icons=['qr-code-scan', 'magic', 'file-earmark-diff', 'spellcheck', 'code-slash', '', 'gear'], 
         menu_icon="grid-fill", 
         default_index=0,
         styles={
@@ -70,23 +70,35 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Tips
-    if app_mode == "สรุปย่อเอกสาร (Summarizer)":
-        st.info("💡 **Tips:** เหมาะสำหรับผู้บริหาร ช่วยสรุปเอกสารหลายสิบหน้าให้เหลือหน้าเดียว")
+    # Contextual Info
+    info_dict = {
+        "AI OCR (แปลง PDF)": "Advanced OCR: อ่านเอกสารภาพ/PDF เป็นข้อความ",
+        "แก้ PDF เพี้ยน (Quick Fix)": "Fix PDF: แก้ภาษาต่างดาวให้เป็น Word",
+        "เปรียบเทียบเอกสาร": "Compare Docs: หาจุดต่างระหว่าง 2 ไฟล์",
+        "ตรวจการสะกดคำ": "Proofread: ตรวจคำผิดและแก้ประโยค",
+        "เปรียบเทียบโค้ด": "Diff Code: เทียบ Source Code สำหรับ Dev",
+        "ตั้งค่า & ประวัติ": "Settings: จัดการ Key และดู Log ย้อนหลัง"
+    }
+    
+    if app_mode in info_dict:
+        st.info(f"💡 **Info:** {info_dict[app_mode]}")
 
-# --- ROUTER ---
+# --- 3. MAIN LOGIC (Router) ---
 
 if app_mode == "AI OCR (แปลง PDF)":
     render_ocr_mode()
+
 elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
     render_quick_convert_mode()
-elif app_mode == "สรุปย่อเอกสาร (Summarizer)":
-    render_summarize_mode() # <--- เรียกใช้
+
 elif app_mode == "เปรียบเทียบเอกสาร":
     render_document_compare_mode()
+
 elif app_mode == "ตรวจการสะกดคำ":
     render_spell_check_mode()
+
 elif app_mode == "เปรียบเทียบโค้ด":
     render_code_compare_mode("all")
+
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
