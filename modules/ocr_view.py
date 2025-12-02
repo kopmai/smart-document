@@ -19,12 +19,15 @@ def clean_ocr_text(text):
     lines = text.split('\n')
     cleaned_lines = []
     for line in lines:
-        if re.match(r'^[\s\|\-\_\=\:\+]{3,}$', line.strip()):
+        # ถ้าเป็นโหมดตาราง เราอาจจะอยากเก็บเส้นตารางไว้ (Markdown)
+        # แต่ถ้ามันรกเกินไป Regex นี้จะช่วยกรองเส้นยาวๆ ทิ้ง
+        if re.match(r'^[\s\-\_\=\:\+]{5,}$', line.strip()): # ปรับ Regex ให้ยอมรับ | (Pipe) ของ Markdown Table
             continue
         cleaned_lines.append(line)
     return '\n'.join(cleaned_lines)
 
-def ocr_single_image(api_key, image, model_name):
+# --- FIX: เพิ่ม parameter table_mode ---
+def ocr_single_image(api_key, image, model_name, table_mode=False):
     try:
         genai.configure(api_key=api_key)
         safety_settings = [
@@ -35,13 +38,27 @@ def ocr_single_image(api_key, image, model_name):
         ]
         model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
         
-        prompt = """
-        Extract all text from this image perfectly.
-        - Preserve the layout (paragraphs, tables) as much as possible.
-        - If there is a table, preserve the data structure but DO NOT print ASCII borders or Markdown divider lines (like |---|). 
-        - Just use spacing or tabs to separate columns if possible.
-        - If Thai text is present, ensure correct spelling.
-        """
+        # --- Prompt Logic ---
+        base_prompt = "Extract all text from this image perfectly. If Thai text is present, ensure correct spelling."
+        
+        if table_mode:
+            # คำสั่งสำหรับโหมดตาราง (เน้น Markdown Table)
+            prompt = f"""
+            {base_prompt}
+            - **TABLE MODE ACTIVATED**: There are tables in this image.
+            - Represent tables using **Markdown Table** format (using pipes | and hyphens -).
+            - Ensure every row aligns correctly.
+            - Keep non-tabular text in original layout.
+            """
+        else:
+            # คำสั่งปกติ
+            prompt = f"""
+            {base_prompt}
+            - Preserve the layout (paragraphs, lists).
+            - Do NOT print ASCII borders or complex Markdown tables unless necessary.
+            - Just use spacing or tabs to separate columns if possible.
+            """
+        
         response = model.generate_content([prompt, image])
         final_text = clean_ocr_text(response.text)
         return final_text
@@ -60,22 +77,18 @@ def create_word_docx(text_list):
     return buffer
 
 def render_ocr_mode():
-    # --- Session State ---
     if 'ocr_results' not in st.session_state: st.session_state['ocr_results'] = [] 
     if 'ocr_images' not in st.session_state: st.session_state['ocr_images'] = []
     if 'current_page_index' not in st.session_state: st.session_state['current_page_index'] = 0
     if 'processed_file_id' not in st.session_state: st.session_state['processed_file_id'] = None
 
-    # --- FIX: ย้ายทุกอย่างเข้าไปใน Expander ใหญ่ (Control Panel) ---
-    with st.expander("🛠️ แผงควบคุม: ตั้งค่า / อัปโหลด / เลือกหน้า (Control Panel)", expanded=True):
-        
-        # 1. Settings
+    with st.expander("⚙️ ตั้งค่าและอัปโหลดไฟล์ (Settings & Upload)", expanded=True):
         col_key, col_model = st.columns([1, 1])
         with col_key:
             api_key = None
             if "GEMINI_API_KEY" in st.secrets:
                 api_key = st.secrets["GEMINI_API_KEY"]
-                st.success("✅ API Key Connected")
+                st.success("✅ เชื่อมต่อกับ API Key อัตโนมัติแล้ว")
             else:
                 api_key = st.text_input("🔑 Gemini API Key", type="password")
         with col_model:
@@ -88,116 +101,112 @@ def render_ocr_mode():
                         if "flash" in name and "exp" not in name:
                             default_idx = i; break
                     selected_model = st.selectbox("🤖 เลือก AI Model", model_options, index=default_idx)
+                    
+                    # --- ADD: Checkbox เลือกโหมดตาราง ---
+                    table_mode = st.checkbox("📊 โหมดเน้นตาราง (Force Table Mode)", help="ติ๊กช่องนี้ถ้าเอกสารมีตารางเยอะ AI จะพยายามจัดรูปแบบตารางให้ดีขึ้น")
 
-        # 2. Upload
         uploaded_file = st.file_uploader("📄 อัปโหลดไฟล์ PDF (AI OCR)", type=["pdf"])
 
-        # 3. Processing Tabs
-        if uploaded_file and api_key and selected_model:
-            st.markdown("---")
-            # Tabs อยู่ใน Expander แล้ว ไม่กินที่ข้างล่าง
-            tab_batch, tab_select = st.tabs(["🚀 แปลงทั้งหมด (Batch)", "👁️ เลือกเฉพาะหน้า (Selective)"])
+    if uploaded_file and api_key and selected_model:
+        if st.session_state['processed_file_id'] != uploaded_file.file_id:
+            pass
 
-            # === TAB 1: BATCH ===
-            with tab_batch:
-                st.info("ℹ️ อ่านเอกสารรวดเดียวทุกหน้า")
-                if st.button("🚀 เริ่ม OCR ทุกหน้า", type="primary", use_container_width=True):
-                    # Reset Data
+        tab_batch, tab_select = st.tabs(["🚀 แปลงทั้งหมด (Batch)", "👁️ เลือกเฉพาะหน้า (Selective)"])
+
+        with tab_batch:
+            st.info("ℹ️ อ่านเอกสารรวดเดียวทุกหน้า")
+            if st.button("🚀 เริ่ม OCR ทุกหน้า", type="primary", use_container_width=True):
+                st.session_state['ocr_results'] = []
+                st.session_state['ocr_images'] = []
+                st.session_state['current_page_index'] = 0
+                st.session_state['processed_file_id'] = uploaded_file.file_id
+
+                with st.spinner("📦 กำลังแยกหน้า PDF..."):
+                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    temp_images = []
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        pix = page.get_pixmap(dpi=150)
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        temp_images.append(img)
+                    st.session_state['ocr_images'] = temp_images
+                    st.session_state['ocr_results'] = [""] * len(temp_images)
+
+                progress_bar = st.progress(0, text="กำลังเริ่ม OCR...")
+                total_pages = len(st.session_state['ocr_images'])
+                for i, img in enumerate(st.session_state['ocr_images']):
+                    progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
+                    
+                    # ส่งค่า table_mode เข้าไป
+                    text_result = ocr_single_image(api_key, img, selected_model, table_mode)
+                    
+                    st.session_state['ocr_results'][i] = text_result
+                progress_bar.progress(1.0, text="เสร็จเรียบร้อย!")
+                st.rerun()
+
+        with tab_select:
+            st.info("ℹ️ เลือกเฉพาะหน้าที่ต้องการใช้งาน")
+            if 'ocr_preview_imgs' not in st.session_state or st.session_state.get('ocr_preview_fid') != uploaded_file.file_id:
+                with st.spinner("🖼️ สร้างภาพตัวอย่าง..."):
+                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    previews = []
+                    for i in range(len(doc)):
+                        page = doc.load_page(i)
+                        pix = page.get_pixmap(dpi=72)
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        previews.append(img)
+                    st.session_state['ocr_preview_imgs'] = previews
+                    st.session_state['ocr_preview_fid'] = uploaded_file.file_id
+
+            with st.form("ocr_select_form"):
+                images = st.session_state['ocr_preview_imgs']
+                cols = st.columns(4)
+                selected_indices = []
+                for i, img in enumerate(images):
+                    col = cols[i % 4]
+                    with col:
+                        st.image(img, use_container_width=True)
+                        if st.checkbox(f"หน้า {i+1}", key=f"ocr_chk_{i}"):
+                            selected_indices.append(i)
+                
+                st.markdown("---")
+                submitted = st.form_submit_button("✅ เริ่ม OCR เฉพาะหน้าที่เลือก", type="primary", use_container_width=True)
+
+            if submitted:
+                if not selected_indices:
+                    st.warning("กรุณาเลือกอย่างน้อย 1 หน้า")
+                else:
                     st.session_state['ocr_results'] = []
                     st.session_state['ocr_images'] = []
                     st.session_state['current_page_index'] = 0
                     st.session_state['processed_file_id'] = uploaded_file.file_id
-
-                    with st.spinner("📦 กำลังแยกหน้า PDF..."):
-                        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                        temp_images = []
-                        for page_num in range(len(doc)):
-                            page = doc.load_page(page_num)
-                            pix = page.get_pixmap(dpi=150)
-                            img = Image.open(io.BytesIO(pix.tobytes()))
-                            temp_images.append(img)
-                        st.session_state['ocr_images'] = temp_images
-                        st.session_state['ocr_results'] = [""] * len(temp_images)
-
-                    progress_bar = st.progress(0, text="กำลังเริ่ม OCR...")
-                    total_pages = len(st.session_state['ocr_images'])
-                    for i, img in enumerate(st.session_state['ocr_images']):
-                        progress_bar.progress((i) / total_pages, text=f"🔍 กำลังอ่านหน้า {i+1}/{total_pages}...")
-                        text_result = ocr_single_image(api_key, img, selected_model)
-                        st.session_state['ocr_results'][i] = text_result
-                    progress_bar.progress(1.0, text="เสร็จเรียบร้อย! (พับกล่องนี้เก็บเพื่อดูผลลัพธ์ได้เลย)")
+                    
+                    selected_indices.sort()
+                    progress_bar = st.progress(0, text="เริ่มทำงาน...")
+                    
+                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                    total_sel = len(selected_indices)
+                    
+                    for idx, page_num in enumerate(selected_indices):
+                        progress_bar.progress((idx / total_sel), text=f"🔍 กำลังอ่านหน้า {page_num+1} ({idx+1}/{total_sel})...")
+                        page = doc.load_page(page_num)
+                        pix = page.get_pixmap(dpi=150)
+                        img = Image.open(io.BytesIO(pix.tobytes()))
+                        
+                        st.session_state['ocr_images'].append(img)
+                        # ส่งค่า table_mode เข้าไป
+                        text_res = ocr_single_image(api_key, img, selected_model, table_mode)
+                        
+                        st.session_state['ocr_results'].append(text_res)
+                    
+                    progress_bar.progress(1.0, text="เสร็จเรียบร้อย!")
                     st.rerun()
 
-            # === TAB 2: SELECTIVE ===
-            with tab_select:
-                st.info("ℹ️ เลือกเฉพาะหน้าที่ต้องการใช้งาน")
-                # Preview Gen
-                if 'ocr_preview_imgs' not in st.session_state or st.session_state.get('ocr_preview_fid') != uploaded_file.file_id:
-                    with st.spinner("🖼️ สร้างภาพตัวอย่าง..."):
-                        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                        previews = []
-                        for i in range(len(doc)):
-                            page = doc.load_page(i)
-                            pix = page.get_pixmap(dpi=72)
-                            img = Image.open(io.BytesIO(pix.tobytes()))
-                            previews.append(img)
-                        st.session_state['ocr_preview_imgs'] = previews
-                        st.session_state['ocr_preview_fid'] = uploaded_file.file_id
-
-                # Grid Selection
-                with st.form("ocr_select_form"):
-                    images = st.session_state['ocr_preview_imgs']
-                    cols = st.columns(4)
-                    selected_indices = []
-                    for i, img in enumerate(images):
-                        col = cols[i % 4]
-                        with col:
-                            st.image(img, use_container_width=True)
-                            if st.checkbox(f"หน้า {i+1}", key=f"ocr_chk_{i}"):
-                                selected_indices.append(i)
-                    
-                    st.markdown("---")
-                    submitted = st.form_submit_button("✅ เริ่ม OCR เฉพาะหน้าที่เลือก", type="primary", use_container_width=True)
-
-                if submitted:
-                    if not selected_indices:
-                        st.warning("กรุณาเลือกอย่างน้อย 1 หน้า")
-                    else:
-                        st.session_state['ocr_results'] = []
-                        st.session_state['ocr_images'] = []
-                        st.session_state['current_page_index'] = 0
-                        st.session_state['processed_file_id'] = uploaded_file.file_id
-                        
-                        selected_indices.sort()
-                        progress_bar = st.progress(0, text="เริ่มทำงาน...")
-                        
-                        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                        total_sel = len(selected_indices)
-                        
-                        for idx, page_num in enumerate(selected_indices):
-                            progress_bar.progress((idx / total_sel), text=f"🔍 กำลังอ่านหน้า {page_num+1} ({idx+1}/{total_sel})...")
-                            
-                            page = doc.load_page(page_num)
-                            pix = page.get_pixmap(dpi=150)
-                            img = Image.open(io.BytesIO(pix.tobytes()))
-                            
-                            st.session_state['ocr_images'].append(img)
-                            text_res = ocr_single_image(api_key, img, selected_model)
-                            st.session_state['ocr_results'].append(text_res)
-                        
-                        progress_bar.progress(1.0, text="เสร็จเรียบร้อย! (พับกล่องนี้เก็บเพื่อดูผลลัพธ์ได้เลย)")
-                        st.rerun()
-
-    # 2. ส่วนแสดงผล (อยู่นอก Expander)
-    # ตรงนี้จะโชว์เด่นๆ เลย ไม่ต้องเลื่อนหา
     if st.session_state.get('processed_file_id') == uploaded_file.file_id if uploaded_file else False:
         if st.session_state.get('ocr_results'):
-            
-            st.markdown("### 📄 ผลลัพธ์ (Result)") # หัวข้อชัดเจน
-            
+            st.markdown("### 📄 ผลลัพธ์ (Result)")
             total_pages = len(st.session_state['ocr_images'])
             
-            # Controller
             col_prev, col_nav_info, col_next, col_download = st.columns([1, 2, 1, 1.5])
             with col_prev:
                 if st.button("⬅️ ก่อนหน้า", use_container_width=True, disabled=(st.session_state['current_page_index'] == 0)):
