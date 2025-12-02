@@ -111,9 +111,11 @@ st.markdown("""
 
 # --- 2. SIDEBAR (MENU) ---
 with st.sidebar:
-
+    
     app_mode = option_menu(
-        menu_title="รายการระบบ", 
+        # --- FIX: เปลี่ยนชื่อเป็น None เพื่อซ่อนหัวข้อ ---
+        menu_title=None, 
+        # -------------------------------------------
         options=[
             "AI OCR (แปลง PDF)",
             "แก้ PDF เพี้ยน (Quick Fix)",
@@ -136,8 +138,8 @@ with st.sidebar:
                 "--hover-color": "#eef0f2",
                 "color": "#495057"
             },
-            "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
-            "menu-title": {"color": "#495057", "font-size": "16px", "font-weight": "bold", "margin-bottom": "10px"}
+            "nav-link-selected": {"background-color": "#0d6efd", "color": "white"}
+            # ไม่ต้องมี style "menu-title" แล้ว เพราะเราซ่อนมันไปแล้ว
         }
     )
 
@@ -175,4 +177,5 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
+
 
