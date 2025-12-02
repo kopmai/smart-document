@@ -19,40 +19,50 @@ st.set_page_config(layout="wide", page_title="Smart Document - Intelligent Platf
 
 st.markdown("""
     <style>
+        /* ... (ส่วน import font เหมือนเดิม) ... */
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
         html, body, [class*="css"], font, button, input, textarea, div { font-family: 'Kanit', sans-serif !important; }
         
-        header[data-testid="stHeader"] { background-color: transparent !important; z-index: 999999 !important; }
+        /* ซ่อน Header เดิม */
+        header[data-testid="stHeader"] { background-color: transparent !important; z-index: 1 !important; }
         div[data-testid="stDecoration"] { display: none; }
-        .block-container { padding-top: 50px !important; padding-bottom: 1rem !important; }
         
+        /* ปรับระยะเนื้อหาหลัก */
+        .block-container { padding-top: 60px !important; padding-bottom: 1rem !important; }
+        
+        /* --- NAVBAR (ให้ลอยอยู่เหนือทุกสิ่ง) --- */
         .top-navbar {
-            position: fixed; top: 0; left: 0; right: 0; height: 50px;
-            background-color: #ffffff; border-bottom: 1px solid #e0e0e0;
-            z-index: 99999; display: flex; align-items: center; padding-left: 80px;
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            height: 50px;
+            background-color: #ffffff; 
+            border-bottom: 1px solid #e0e0e0;
+            z-index: 1000000; /* ค่าสูงสุด เพื่อทับ Sidebar */
+            display: flex; 
+            align-items: center; 
+            padding-left: 80px; /* เว้นที่ให้ปุ่ม Hamburger */
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
-        .navbar-logo { 
-            font-size: 20px; font-weight: 600; color: #0d6efd;
-            display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;
+        /* --- SIDEBAR (ให้เต็มจอตั้งแต่ขอบบน) --- */
+        section[data-testid="stSidebar"] { 
+            top: 0px !important; /* ชนขอบบนเลย */
+            background-color: #f8f9fa;
+            z-index: 999999; /* อยู่ใต้ Navbar นิดนึง */
+            padding-top: 50px !important; /* ดันเนื้อหาในเมนูลงมา ไม่ให้โดน Navbar บัง */
         }
-        .navbar-tagline {
-            font-size: 13px; color: #6c757d; margin-left: 15px; font-weight: 300;
-            border-left: 1px solid #dee2e6; padding-left: 15px;
-        }
-
-        section[data-testid="stSidebar"] { top: 50px !important; background-color: #f8f9fa; }
         
-        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
-            border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; 
-        }
+        /* ... (ส่วน Logo, Card, Font อื่นๆ เหมือนเดิม) ... */
+        .navbar-logo { font-size: 20px; font-weight: 600; color: #0d6efd; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
+        .navbar-tagline { font-size: 13px; color: #6c757d; margin-left: 15px; font-weight: 300; border-left: 1px solid #dee2e6; padding-left: 15px; }
+        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; }
         .css-card { background-color: white; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eef0f2; margin-top: -15px; }
         .match-badge { background-color: #0d6efd; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
-        
         .nav-link-selected { font-weight: 600 !important; }
     </style>
     
@@ -138,4 +148,5 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
+
 
