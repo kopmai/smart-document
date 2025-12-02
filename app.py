@@ -28,78 +28,61 @@ st.markdown("""
             font-family: 'Kanit', sans-serif !important; 
         }
         
-        /* --- 1. NAVBAR (แถบบนสุด) --- */
+        /* --- 1. Z-INDEX STRATEGY (สำคัญมาก!) --- */
+        
+        /* Level 1: Navbar (อยู่ล่างสุดในกลุ่ม Header) */
         .top-navbar {
-            position: fixed; 
+            position: sticky; 
             top: 0; 
-            left: 0; 
-            right: 0; 
-            height: 60px;
+            z-index: 990; /* ต่ำกว่า Header และ Sidebar */
             background-color: #ffffff; 
+            height: 60px;
             border-bottom: 1px solid #e0e0e0;
-            z-index: 99999; /* อยู่เหนือทุกอย่าง */
             display: flex; 
             align-items: center; 
-            padding-left: 80px; /* เว้นที่ให้ปุ่ม Hamburger */
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding-left: 60px; /* เว้นที่ให้ปุ่ม Hamburger */
+            width: 100%;
+            margin-bottom: 20px;
         }
-        
-        /* --- 2. STREAMLIT HEADER (ซ่อน Header เดิมทิ้งไปเลยเพื่อลดช่องว่าง) --- */
+
+        /* Level 2: Streamlit Header (อยู่เหนือ Navbar เพื่อให้ปุ่ม Hamburger กดได้) */
         header[data-testid="stHeader"] { 
-            background-color: transparent !important;
-            z-index: 100000 !important; /* ให้ปุ่ม Hamburger อยู่เหนือ Navbar เรา */
+            background-color: transparent !important; 
+            z-index: 991 !important; 
+            pointer-events: none; /* อนุญาตให้คลิกทะลุพื้นที่ว่างไปโดน Navbar ได้ */
         }
         
-        /* ซ่อนแถบสีรุ้ง */
-        div[data-testid="stDecoration"] { display: none; }
-        div[data-testid="stToolbar"] { display: none; } /* ซ่อน Toolbar ขวาบนถ้าไม่ใช้ */
+        /* Level 3: เฉพาะปุ่มใน Header (ต้องกดได้) */
+        header[data-testid="stHeader"] button {
+            pointer-events: auto !important; /* กลับมาคลิกได้ */
+            color: #0d6efd !important; /* บังคับปุ่มเป็นสีฟ้า (จะได้เห็นชัดๆ บนพื้นขาว) */
+        }
 
-        /* --- 3. SIDEBAR (ปรับให้เต็มจอและดันเนื้อหาลง) --- */
+        /* Level 4: Sidebar (อยู่สูงสุด ทับทุกอย่างเมื่อเปิดออกมา) */
         section[data-testid="stSidebar"] { 
-            top: 0px !important;      /* ชนขอบบนสุด */
-            height: 100vh !important; /* สูงเต็มจอ */
-            z-index: 99998 !important; /* อยู่ใต้ Navbar นิดนึง */
-            padding-top: 60px !important; /* ดันเนื้อหาเมนูลงมา เท่าความสูง Navbar */
+            top: 0px !important;      
+            height: 100vh !important;
+            z-index: 9999 !important; /* สูงสุด */
+            padding-top: 50px !important; 
             background-color: #f8f9fa;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
-        }
-        
-        /* ปรับปุ่มปิด Sidebar (x) ให้ลงมาหน่อย */
-        button[kind="header"] {
-            top: 10px !important;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
         }
 
-        /* --- 4. MAIN CONTENT (เนื้อหาหลัก) --- */
+        /* --- 2. LAYOUT FIXES --- */
+        div[data-testid="stDecoration"] { display: none; }
+        
         .block-container { 
-            /* ดันเนื้อหาลงมาให้พ้น Navbar (60px) + ระยะห่างนิดหน่อย (20px) */
-            padding-top: 80px !important; 
+            padding-top: 0px !important; /* ดึงเนื้อหาขึ้นบนสุด */
             padding-bottom: 2rem !important; 
         }
         
-        /* ลบ Margin ส่วนเกินของ Element ตัวแรกสุด */
-        .block-container > div:first-child {
-            margin-top: 0px !important;
-            padding-top: 0px !important;
-        }
-        
-        /* --- Styles อื่นๆ --- */
-        .navbar-logo { 
-            font-size: 22px; font-weight: 600; color: #0d6efd;
-            display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;
-        }
-        .navbar-tagline {
-            font-size: 14px; color: #6c757d; margin-left: 15px; font-weight: 300;
-            border-left: 1px solid #dee2e6; padding-left: 15px;
-        }
-
-        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
-            border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; 
-        }
+        /* Styles อื่นๆ */
+        .navbar-logo { font-size: 22px; font-weight: 600; color: #0d6efd; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
+        .navbar-tagline { font-size: 14px; color: #6c757d; margin-left: 15px; font-weight: 300; border-left: 1px solid #dee2e6; padding-left: 15px; }
+        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; }
         .css-card { background-color: white; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eef0f2; margin-top: -15px; }
         .match-badge { background-color: #0d6efd; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
-        
-        /* Option Menu Style */
         .nav-link-selected { font-weight: 600 !important; }
     </style>
     
@@ -145,18 +128,18 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Contextual Info
-    info_dict = {
-        "AI OCR (แปลง PDF)": "Advanced OCR: อ่านเอกสารภาพ/PDF เป็นข้อความ",
-        "แก้ PDF เพี้ยน (Quick Fix)": "Fix PDF: แก้ภาษาต่างดาวให้เป็น Word",
-        "เปรียบเทียบเอกสาร": "Compare Docs: หาจุดต่างระหว่าง 2 ไฟล์",
-        "ตรวจการสะกดคำ": "Proofread: ตรวจคำผิดและแก้ประโยค",
-        "เปรียบเทียบโค้ด": "Diff Code: เทียบ Source Code สำหรับ Dev",
-        "ตั้งค่า & ประวัติ": "Settings: ดูประวัติการใช้งาน (Session Log)"
-    }
-    
-    if app_mode in info_dict:
-        st.info(f"💡 **Info:** {info_dict[app_mode]}")
+    if app_mode == "AI OCR (แปลง PDF)":
+        st.info("💡 **Advanced:** อ่านเอกสารภาพ/PDF เป็นข้อความ")
+    elif app_mode == "แก้ PDF เพี้ยน (Quick Fix)":
+        st.info("💡 **Fast Track:** แก้ภาษาต่างดาวให้เป็น Word")
+    elif app_mode == "เปรียบเทียบเอกสาร":
+        st.info("💡 **Compare:** หาจุดต่างระหว่าง 2 ไฟล์")
+    elif app_mode == "ตรวจการสะกดคำ":
+        st.info("💡 **Proofread:** ตรวจคำผิดและแก้ประโยค")
+    elif app_mode == "เปรียบเทียบโค้ด":
+        st.info("💡 **Diff Code:** เทียบ Source Code")
+    elif app_mode == "ตั้งค่า & ประวัติ":
+        st.info("⚙️ **Settings:** ดูประวัติการใช้งาน")
 
 # --- 3. MAIN LOGIC (Router) ---
 
