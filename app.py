@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
 
-# Import Views (เรียกจากโครงสร้างใหม่)
+# Import Views
 from modules.services.loader import DocumentLoader
 from modules.services.comparator import TextComparator 
 
@@ -19,50 +19,72 @@ st.set_page_config(layout="wide", page_title="Smart Document - Intelligent Platf
 
 st.markdown("""
     <style>
-        /* ... (ส่วน import font เหมือนเดิม) ... */
+        /* Import Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
-        html, body, [class*="css"], font, button, input, textarea, div { font-family: 'Kanit', sans-serif !important; }
+        /* Global Font */
+        html, body, [class*="css"], font, button, input, textarea, div { 
+            font-family: 'Kanit', sans-serif !important; 
+        }
         
-        /* ซ่อน Header เดิม */
-        header[data-testid="stHeader"] { background-color: transparent !important; z-index: 1 !important; }
-        div[data-testid="stDecoration"] { display: none; }
-        
-        /* ปรับระยะเนื้อหาหลัก */
-        .block-container { padding-top: 60px !important; padding-bottom: 1rem !important; }
-        
-        /* --- NAVBAR (ให้ลอยอยู่เหนือทุกสิ่ง) --- */
+        /* --- 1. NAVBAR (แถบบนสุด) --- */
         .top-navbar {
             position: fixed; 
             top: 0; 
             left: 0; 
             right: 0; 
-            height: 50px;
+            height: 60px; /* เพิ่มความสูงนิดนึงให้ดูโปร่ง */
             background-color: #ffffff; 
             border-bottom: 1px solid #e0e0e0;
-            z-index: 1000000; /* ค่าสูงสุด เพื่อทับ Sidebar */
+            z-index: 9999; /* อยู่ชั้นล่างกว่า Sidebar */
             display: flex; 
             align-items: center; 
             padding-left: 80px; /* เว้นที่ให้ปุ่ม Hamburger */
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
-        /* --- SIDEBAR (ให้เต็มจอตั้งแต่ขอบบน) --- */
+        /* --- 2. STREAMLIT HEADER (ปุ่ม Hamburger) --- */
+        header[data-testid="stHeader"] { 
+            background-color: transparent !important; 
+            z-index: 10000 !important; /* ต้องอยู่เหนือ Navbar เพื่อให้กดปุ่มได้ */
+        }
+        div[data-testid="stDecoration"] { display: none; }
+        
+        /* --- 3. SIDEBAR (เมนูซ้าย - แก้ไขจุดนี้) --- */
         section[data-testid="stSidebar"] { 
-            top: 0px !important; /* ชนขอบบนเลย */
+            top: 0px !important;      /* ชนขอบบนสุด */
+            height: 100vh !important; /* สูงเต็มจอ */
+            z-index: 10001 !important; /* อยู่ชั้นสูงสุด! ทับ Navbar ไปเลย */
+            padding-top: 50px !important; /* ดันเนื้อหาเมนูลงมา ไม่ให้ชนขอบบนเกินไป */
             background-color: #f8f9fa;
-            z-index: 999999; /* อยู่ใต้ Navbar นิดนึง */
-            padding-top: 50px !important; /* ดันเนื้อหาในเมนูลงมา ไม่ให้โดน Navbar บัง */
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1); /* เพิ่มเงาให้ดูมีมิติ */
+        }
+
+        /* --- 4. MAIN CONTENT (เนื้อหาหลัก) --- */
+        .block-container { 
+            padding-top: 80px !important; /* ดันเนื้อหาลงมาหลบ Navbar */
+            padding-bottom: 2rem !important; 
         }
         
-        /* ... (ส่วน Logo, Card, Font อื่นๆ เหมือนเดิม) ... */
-        .navbar-logo { font-size: 20px; font-weight: 600; color: #0d6efd; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
-        .navbar-tagline { font-size: 13px; color: #6c757d; margin-left: 15px; font-weight: 300; border-left: 1px solid #dee2e6; padding-left: 15px; }
-        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; }
+        /* --- Styles อื่นๆ --- */
+        .navbar-logo { 
+            font-size: 22px; font-weight: 600; color: #0d6efd;
+            display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;
+        }
+        .navbar-tagline {
+            font-size: 14px; color: #6c757d; margin-left: 15px; font-weight: 300;
+            border-left: 1px solid #dee2e6; padding-left: 15px;
+        }
+
+        div[data-baseweb="base-input"], div[data-baseweb="textarea"] { 
+            border: 1px solid #ced4da !important; border-radius: 8px !important; background-color: #ffffff !important; 
+        }
         .css-card { background-color: white; padding: 1rem 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eef0f2; margin-top: -15px; }
         .match-badge { background-color: #0d6efd; color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; }
         textarea { font-family: 'JetBrains Mono', monospace !important; font-size: 14px !important; }
+        
+        /* Option Menu Style */
         .nav-link-selected { font-weight: 600 !important; }
     </style>
     
@@ -93,23 +115,15 @@ with st.sidebar:
         default_index=0,
         styles={
             "container": {"padding": "5px", "background-color": "#f8f9fa"},
-            
-            # --- FIX: เอา "color": "#0d6efd" ออก เพื่อให้สีเปลี่ยนตามสถานะ ---
             "icon": {"font-size": "16px"}, 
-            # -------------------------------------------------------------
-            
-            # ปรับสีข้อความตอนปกติ (Unselected) ให้เป็นสีเทาเข้ม
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "left", 
                 "margin": "2px", 
                 "--hover-color": "#eef0f2",
-                "color": "#495057" # สีเทาเข้ม (Icon จะเป็นสีนี้ด้วยตอนปกติ)
+                "color": "#495057"
             },
-            
-            # สีตอนถูกเลือก (Selected) -> สีขาว (Icon จะขาวตาม)
             "nav-link-selected": {"background-color": "#0d6efd", "color": "white"},
-            
             "menu-title": {"color": "#495057", "font-size": "16px", "font-weight": "bold", "margin-bottom": "10px"}
         }
     )
@@ -148,5 +162,3 @@ elif app_mode == "เปรียบเทียบโค้ด":
 
 elif app_mode == "ตั้งค่า & ประวัติ":
     render_settings_page()
-
-
